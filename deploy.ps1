@@ -29,6 +29,19 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+# Load .env file if present (never committed — secrets live here)
+$envFile = Join-Path $PSScriptRoot ".env"
+if (Test-Path $envFile) {
+    Get-Content $envFile | ForEach-Object {
+        if ($_ -match '^\s*([^#][^=]+)=(.*)$') {
+            $name  = $Matches[1].Trim()
+            $value = $Matches[2].Trim().Trim('"').Trim("'")
+            [System.Environment]::SetEnvironmentVariable($name, $value, "Process")
+        }
+    }
+    Write-Host "Loaded .env"
+}
+
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 function Write-Step([string]$msg) {
     Write-Host "`n==> $msg" -ForegroundColor Cyan
