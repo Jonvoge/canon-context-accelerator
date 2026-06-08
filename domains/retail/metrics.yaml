@@ -5,7 +5,7 @@ metrics:
   - name: Total Revenue
     domain: retail
     owner: Retail Analytics Team
-    last_reviewed: 2026-05-15
+    last_reviewed: "2026-05-15"
     status: active
     aliases:
       - revenue
@@ -67,6 +67,499 @@ metrics:
           GROUP BY p.category ORDER BY revenue DESC
 
     depends_on:
-      - Order Status
       - Product Category
+    sensitivity: internal
+
+  - name: Total Gross Revenue
+    domain: retail
+    owner: Retail Analytics Team
+    last_reviewed: "2026-06-08"
+    status: active
+    aliases:
+      - gross revenue
+      - gross sales
+      - gross top line
+
+    definition: >
+      Sum of gross_revenue across all sales transactions, before deducting discounts or
+      returns. Includes promotional bundles. Use Total Revenue for net performance reporting.
+
+    formatting:
+      currency: DKK
+      precision: 0
+      display: "#,##0"
+      conversational: "round to nearest thousand, use K/M suffix"
+
+    governed_sources:
+      primary:
+        platform: fabric
+        type: semantic_model
+        workspace: 'Fabric Demos: Retail Planning'
+        model: RetailSemanticModel
+        measure: Total Gross Revenue
+
+    routing: >
+      Query primary (RetailSemanticModel) for gross revenue questions.
+      Do not substitute for Total Revenue — these differ by discount and bundle exclusions.
+
+    depends_on: []
+    sensitivity: internal
+
+  - name: Total COGS
+    domain: retail
+    owner: Retail Analytics Team
+    last_reviewed: "2026-06-08"
+    status: active
+    aliases:
+      - COGS
+      - cost of goods
+      - cost of goods sold
+
+    definition: >
+      Sum of cost_of_goods_sold across all sales transactions. Represents the direct cost
+      of inventory sold. Used as the denominator basis for gross margin calculations.
+
+    formatting:
+      currency: DKK
+      precision: 0
+      display: "#,##0"
+      conversational: "round to nearest thousand, use K/M suffix"
+
+    governed_sources:
+      primary:
+        platform: fabric
+        type: semantic_model
+        workspace: 'Fabric Demos: Retail Planning'
+        model: RetailSemanticModel
+        measure: Total COGS
+
+    routing: >
+      Query primary (RetailSemanticModel) for cost analysis.
+
+    depends_on: []
+    sensitivity: internal
+
+  - name: Gross Profit
+    domain: retail
+    owner: Retail Analytics Team
+    last_reviewed: "2026-06-08"
+    status: active
+    aliases:
+      - gross profit
+      - profit
+      - margin in DKK
+
+    definition: >
+      Total Revenue minus Total COGS. Represents the profit remaining after direct costs,
+      before operating expenses. Expressed in currency.
+
+    formatting:
+      currency: DKK
+      precision: 0
+      display: "#,##0"
+      conversational: "round to nearest thousand, use K/M suffix"
+
+    governed_sources:
+      primary:
+        platform: fabric
+        type: semantic_model
+        workspace: 'Fabric Demos: Retail Planning'
+        model: RetailSemanticModel
+        measure: Gross Profit
+
+    routing: >
+      Query primary (RetailSemanticModel) for profit analysis.
+
+    depends_on:
+      - Total Revenue
+      - Total COGS
+    sensitivity: internal
+
+  - name: Gross Margin %
+    domain: retail
+    owner: Retail Analytics Team
+    last_reviewed: "2026-06-08"
+    status: active
+    aliases:
+      - gross margin
+      - margin percent
+      - margin %
+      - GM%
+
+    definition: >
+      Gross Profit divided by Total Revenue, expressed as a percentage.
+      Measures profitability after direct costs. A higher value means less of revenue
+      is consumed by cost of goods.
+
+    formatting:
+      precision: 1
+      display: "0.0%"
+      conversational: "one decimal place, as percentage"
+
+    governed_sources:
+      primary:
+        platform: fabric
+        type: semantic_model
+        workspace: 'Fabric Demos: Retail Planning'
+        model: RetailSemanticModel
+        measure: Gross Margin %
+
+    routing: >
+      Query primary (RetailSemanticModel). Do not compute manually from warehouse columns
+      without matching the same revenue exclusions.
+
+    depends_on:
+      - Gross Profit
+      - Total Revenue
+    sensitivity: internal
+
+  - name: Total Discount
+    domain: retail
+    owner: Retail Analytics Team
+    last_reviewed: "2026-06-08"
+    status: active
+    aliases:
+      - discounts
+      - total discounts
+      - discount amount
+
+    definition: >
+      Sum of discount_amount across all sales transactions. Represents the absolute value
+      of price reductions applied at point of sale.
+
+    formatting:
+      currency: DKK
+      precision: 0
+      display: "#,##0"
+      conversational: "round to nearest thousand, use K/M suffix"
+
+    governed_sources:
+      primary:
+        platform: fabric
+        type: semantic_model
+        workspace: 'Fabric Demos: Retail Planning'
+        model: RetailSemanticModel
+        measure: Total Discount
+
+    routing: >
+      Query primary (RetailSemanticModel) for discount analysis.
+
+    depends_on: []
+    sensitivity: internal
+
+  - name: Discount %
+    domain: retail
+    owner: Retail Analytics Team
+    last_reviewed: "2026-06-08"
+    status: active
+    aliases:
+      - discount rate
+      - discount percent
+      - average discount
+
+    definition: >
+      Total Discount divided by Total Gross Revenue, expressed as a percentage.
+      Measures the proportion of list price given away as discounts.
+
+    formatting:
+      precision: 1
+      display: "0.0%"
+      conversational: "one decimal place, as percentage"
+
+    governed_sources:
+      primary:
+        platform: fabric
+        type: semantic_model
+        workspace: 'Fabric Demos: Retail Planning'
+        model: RetailSemanticModel
+        measure: Discount %
+
+    routing: >
+      Query primary (RetailSemanticModel).
+
+    depends_on:
+      - Total Discount
+      - Total Gross Revenue
+    sensitivity: internal
+
+  - name: Total Orders
+    domain: retail
+    owner: Retail Analytics Team
+    last_reviewed: "2026-06-08"
+    status: active
+    aliases:
+      - number of orders
+      - order count
+      - orders
+
+    definition: >
+      Count of distinct order_id values in the sales fact table.
+      Represents transaction volume regardless of quantity or value per order.
+
+    formatting:
+      precision: 0
+      display: "#,##0"
+      conversational: "round to nearest hundred for large volumes"
+
+    governed_sources:
+      primary:
+        platform: fabric
+        type: semantic_model
+        workspace: 'Fabric Demos: Retail Planning'
+        model: RetailSemanticModel
+        measure: Total Orders
+
+    routing: >
+      Query primary (RetailSemanticModel) for order volume questions.
+
+    depends_on: []
+    sensitivity: internal
+
+  - name: Total Quantity
+    domain: retail
+    owner: Retail Analytics Team
+    last_reviewed: "2026-06-08"
+    status: active
+    aliases:
+      - units sold
+      - quantity sold
+      - volume
+
+    definition: >
+      Sum of quantity across all sales transactions.
+      Represents total units moved, regardless of price or product type.
+
+    formatting:
+      precision: 0
+      display: "#,##0"
+      conversational: "round to nearest hundred"
+
+    governed_sources:
+      primary:
+        platform: fabric
+        type: semantic_model
+        workspace: 'Fabric Demos: Retail Planning'
+        model: RetailSemanticModel
+        measure: Total Quantity
+
+    routing: >
+      Query primary (RetailSemanticModel) for unit volume questions.
+
+    depends_on: []
+    sensitivity: internal
+
+  - name: Avg Order Value
+    domain: retail
+    owner: Retail Analytics Team
+    last_reviewed: "2026-06-08"
+    status: active
+    aliases:
+      - AOV
+      - average order value
+      - average basket
+
+    definition: >
+      Total Revenue divided by Total Orders. Measures the average spend per transaction.
+      Higher AOV typically indicates larger basket sizes or more premium product mix.
+
+    formatting:
+      currency: DKK
+      precision: 0
+      display: "#,##0"
+      conversational: "round to nearest ten"
+
+    governed_sources:
+      primary:
+        platform: fabric
+        type: semantic_model
+        workspace: 'Fabric Demos: Retail Planning'
+        model: RetailSemanticModel
+        measure: Avg Order Value
+
+    routing: >
+      Query primary (RetailSemanticModel) for basket analysis.
+
+    depends_on:
+      - Total Revenue
+      - Total Orders
+    sensitivity: internal
+
+  - name: Avg Unit Price
+    domain: retail
+    owner: Retail Analytics Team
+    last_reviewed: "2026-06-08"
+    status: active
+    aliases:
+      - average selling price
+      - ASP
+      - average price
+
+    definition: >
+      Total Revenue divided by Total Quantity. Represents the average price achieved
+      per unit sold. Useful for tracking price realisation over time.
+
+    formatting:
+      currency: DKK
+      precision: 2
+      display: "#,##0.00"
+      conversational: "two decimal places"
+
+    governed_sources:
+      primary:
+        platform: fabric
+        type: semantic_model
+        workspace: 'Fabric Demos: Retail Planning'
+        model: RetailSemanticModel
+        measure: Avg Unit Price
+
+    routing: >
+      Query primary (RetailSemanticModel) for price analysis.
+
+    depends_on:
+      - Total Revenue
+      - Total Quantity
+    sensitivity: internal
+
+  - name: Customer Count
+    domain: retail
+    owner: Retail Analytics Team
+    last_reviewed: "2026-06-08"
+    status: active
+    aliases:
+      - unique customers
+      - number of customers
+      - active customers
+
+    definition: >
+      Count of distinct customer_id values across sales transactions in the period.
+      Represents unique buying customers, not registered accounts. A customer is counted
+      once regardless of how many orders they placed.
+
+    formatting:
+      precision: 0
+      display: "#,##0"
+      conversational: "round to nearest hundred"
+
+    governed_sources:
+      primary:
+        platform: fabric
+        type: semantic_model
+        workspace: 'Fabric Demos: Retail Planning'
+        model: RetailSemanticModel
+        measure: Customer Count
+
+    routing: >
+      Query primary (RetailSemanticModel) for customer volume questions.
+
+    depends_on: []
+    sensitivity: internal
+
+  - name: Revenue PY
+    domain: retail
+    owner: Retail Analytics Team
+    last_reviewed: "2026-06-08"
+    status: active
+    aliases:
+      - prior year revenue
+      - last year revenue
+      - revenue previous year
+
+    definition: >
+      Total Revenue for the same period in the prior year. Calculated using time intelligence
+      on the dim_date table. Used as the reference value for year-over-year comparisons.
+
+    formatting:
+      currency: DKK
+      precision: 0
+      display: "#,##0"
+      conversational: "round to nearest thousand, use K/M suffix"
+
+    governed_sources:
+      primary:
+        platform: fabric
+        type: semantic_model
+        workspace: 'Fabric Demos: Retail Planning'
+        model: RetailSemanticModel
+        measure: Revenue PY
+
+    routing: >
+      Query primary (RetailSemanticModel). Requires a date filter in context to resolve
+      the prior year period correctly.
+
+    depends_on:
+      - Total Revenue
+    sensitivity: internal
+
+  - name: Revenue YTD
+    domain: retail
+    owner: Retail Analytics Team
+    last_reviewed: "2026-06-08"
+    status: active
+    aliases:
+      - year to date revenue
+      - YTD revenue
+      - revenue year to date
+
+    definition: >
+      Cumulative Total Revenue from the start of the current fiscal year through the
+      selected date. Resets at the start of each fiscal year per the dim_date fiscal
+      year definition.
+
+    formatting:
+      currency: DKK
+      precision: 0
+      display: "#,##0"
+      conversational: "round to nearest thousand, use K/M suffix"
+
+    governed_sources:
+      primary:
+        platform: fabric
+        type: semantic_model
+        workspace: 'Fabric Demos: Retail Planning'
+        model: RetailSemanticModel
+        measure: Revenue YTD
+
+    routing: >
+      Query primary (RetailSemanticModel). Always requires a date context.
+
+    depends_on:
+      - Total Revenue
+    sensitivity: internal
+
+  - name: Revenue YoY %
+    domain: retail
+    owner: Retail Analytics Team
+    last_reviewed: "2026-06-08"
+    status: active
+    aliases:
+      - year over year growth
+      - YoY growth
+      - revenue growth
+      - year on year
+
+    definition: >
+      Percentage change in Total Revenue versus the same period in the prior year.
+      Calculated as (Total Revenue - Revenue PY) / Revenue PY. Positive values indicate
+      growth; negative values indicate decline.
+
+    formatting:
+      precision: 1
+      display: "0.0%"
+      conversational: "one decimal place, as percentage with +/- sign for growth context"
+
+    governed_sources:
+      primary:
+        platform: fabric
+        type: semantic_model
+        workspace: 'Fabric Demos: Retail Planning'
+        model: RetailSemanticModel
+        measure: Revenue YoY %
+
+    routing: >
+      Query primary (RetailSemanticModel). Requires a date filter. Do not compute manually
+      without matching the same revenue exclusions as Total Revenue.
+
+    depends_on:
+      - Total Revenue
+      - Revenue PY
     sensitivity: internal
