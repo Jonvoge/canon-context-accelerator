@@ -1,0 +1,72 @@
+# yaml-language-server: $schema=../../schemas/metrics.schema.json
+schema_version: "1.0"
+domain: retail
+metrics:
+  - name: Total Revenue
+    domain: retail
+    owner: Retail Analytics Team
+    last_reviewed: 2026-05-15
+    status: active
+    aliases:
+      - revenue
+      - sales
+      - turnover
+      - top line
+      - how much did we sell
+
+    definition: >
+      Sum of quantity multiplied by unit price for all completed sales transactions.
+      Excludes returns and cancelled orders. Does not include promotional bundles
+      (decision: Finance Review, 2026-04-22).
+
+    formatting:
+      currency: DKK
+      precision: 0
+      display: "#,##0"
+      conversational: "round to nearest thousand, use K/M suffix"
+
+    governed_sources:
+      primary:
+        platform: fabric
+        type: semantic_model
+        workspace: Retail Analytics
+        model: Retail Planning
+        measure: Total Revenue
+      also_exists_in:
+        - platform: fabric
+          type: semantic_model
+          workspace: Finance
+          model: Finance Reporting
+          measure: Total Revenue
+          known_discrepancy: >
+            Does not exclude promotional bundles. Overstates 2-4%. JIRA-4521.
+
+    warehouse:
+      platform: fabric
+      type: sql_endpoint
+      workspace: Retail Analytics
+      lakehouse: retail_lakehouse
+      schema: dbo
+      sql: >
+        SELECT SUM(quantity * unit_price)
+        FROM dbo.sales WHERE status = 'Completed'
+
+    routing: >
+      1. Query primary (Retail Planning via DAX/executeQueries) for direct metric questions.
+      2. Fall back to Fabric SQL endpoint for joins/dimensions not in the semantic model.
+      3. Never query Finance Reporting.
+
+    usage_patterns:
+      - question: Revenue by category for a given period
+        source: warehouse
+        sql: |
+          SELECT p.category, SUM(s.quantity * s.unit_price) AS revenue
+          FROM dbo.sales s
+          JOIN dbo.products p ON s.product_id = p.product_id
+          WHERE s.status='Completed' AND s.order_date BETWEEN '{START}' AND '{END}'
+          GROUP BY p.category ORDER BY revenue DESC
+
+    depends_on:
+      - Order Status
+      - Product Category
+    sensitivity: internal

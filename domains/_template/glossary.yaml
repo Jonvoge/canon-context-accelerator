@@ -1,0 +1,4 @@
+# yaml-language-server: $schema=../../schemas/glossary.schema.json
+schema_version: "1.0"
+domain: __DOMAIN_SLUG__
+terms: []

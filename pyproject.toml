@@ -1,0 +1,49 @@
+[project]
+name = "canon"
+version = "1.0.0"
+description = "Canon — Define your business context once. Keep it honest. Serve it everywhere."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [
+    { name = "Jon Vöge", email = "jon@inspari.dk" }
+]
+
+dependencies = [
+    "pyyaml>=6.0",
+    "jsonschema>=4.20",
+    "azure-identity>=1.15",
+    "requests>=2.31",
+    "mcp>=1.0",
+    "click>=8.1",
+    "pyodbc>=5.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.4",
+    "mypy>=1.10",
+]
+
+[project.scripts]
+canon = "scripts.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["connectors", "serving", "scripts"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

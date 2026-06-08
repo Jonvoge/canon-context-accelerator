@@ -1,0 +1,4 @@
+# yaml-language-server: $schema=../../schemas/metrics.schema.json
+schema_version: "1.0"
+domain: __DOMAIN_SLUG__
+metrics: []

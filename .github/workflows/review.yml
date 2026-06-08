@@ -1,0 +1,38 @@
+name: Canon Review
+on:
+  pull_request:
+    paths:
+      - 'domains/**'
+      - 'shared/**'
+      - 'scan-config.yaml'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Schema validation
+        run: |
+          echo "Validating YAML schemas..."
+          uv run canon validate --domain retail
+
+      - name: Cross-file consistency
+        run: |
+          echo "Running cross-file consistency checks..."
+          uv run python scripts/review_consistency.py

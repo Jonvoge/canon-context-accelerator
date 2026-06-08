@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: How to use Canon
+    url: https://github.com/Jonvoge/canon-context-accelerator#readme
+    about: Read the README for setup and usage instructions.
+  - name: Report a bug
+    url: https://github.com/Jonvoge/canon-context-accelerator/issues/new
+    about: For non-drift issues, open a regular issue.

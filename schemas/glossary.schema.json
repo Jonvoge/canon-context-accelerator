@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://canon.dev/schema/glossary.v1.json",
+  "title": "Canon glossary.yaml",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "domain", "terms"],
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0" },
+    "domain": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "terms": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/term" },
+      "default": []
+    }
+  },
+  "$defs": {
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "stringArray": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/nonEmptyString" },
+      "uniqueItems": true,
+      "default": []
+    },
+    "term": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "definition", "status"],
+      "properties": {
+        "name": { "$ref": "#/$defs/nonEmptyString" },
+        "definition": { "$ref": "#/$defs/nonEmptyString" },
+        "aliases": { "$ref": "#/$defs/stringArray" },
+        "related_metrics": { "$ref": "#/$defs/stringArray" },
+        "related_dimensions": { "$ref": "#/$defs/stringArray" },
+        "owner": { "$ref": "#/$defs/nonEmptyString" },
+        "status": { "type": "string", "enum": ["active", "deprecated"] },
+        "sensitivity": { "$ref": "#/$defs/nonEmptyString" },
+        "notes": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    }
+  }
+}

@@ -1,0 +1,22 @@
+"""Databricks Unity Catalog connector stub."""
+
+from connectors.base import BaseConnector, MetadataSnapshot
+
+
+class DatabricksConnector(BaseConnector):
+    """Databricks Unity Catalog metadata inspection."""
+
+    def __init__(self, config: dict) -> None:
+        self.config = config
+
+    def validate_config(self) -> list[str]:
+        raise NotImplementedError("Databricks connector not yet implemented")
+
+    def test_connection(self) -> bool:
+        raise NotImplementedError("Databricks connector not yet implemented")
+
+    def fetch_metadata(self) -> MetadataSnapshot:
+        raise NotImplementedError("Databricks connector not yet implemented")
+
+    def profile_dimension(self, source_ref: str, max_values: int = 500) -> list:
+        raise NotImplementedError("Databricks connector not yet implemented")

@@ -1,0 +1,57 @@
+name: "Drift: Orphaned Definition"
+description: "A Canon definition no longer has a matching source in the platform."
+title: "[Drift] Orphaned: "
+labels: ["canon", "drift", "orphaned-definition"]
+body:
+  - type: input
+    id: domain
+    attributes:
+      label: Domain
+      placeholder: retail
+    validations:
+      required: true
+
+  - type: input
+    id: metric_name
+    attributes:
+      label: Canon Metric Name
+      placeholder: "Total Revenue"
+    validations:
+      required: true
+
+  - type: textarea
+    id: missing_pointer
+    attributes:
+      label: Missing Authored Pointer
+      description: "The source reference that no longer resolves"
+      placeholder: "workspace: Retail Analytics, model: Retail Planning, measure: Total Revenue"
+    validations:
+      required: true
+
+  - type: input
+    id: last_reviewed
+    attributes:
+      label: Last Reviewed Date
+      placeholder: "2026-05-15"
+
+  - type: input
+    id: owner
+    attributes:
+      label: Owner
+      placeholder: "@retail-analytics-team"
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - high
+        - medium
+        - low
+    validations:
+      required: true
+
+  - type: input
+    id: scan_run_id
+    attributes:
+      label: Scan Run ID

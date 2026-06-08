@@ -1,0 +1,19 @@
+# Canon CODEOWNERS
+# Each domain folder requires review from the domain owner(s).
+# Shared rules and automation require repo-admin review.
+
+# Shared conventions
+/shared/ @Jonvoge
+
+# Connectors and serving
+/connectors/ @Jonvoge
+/serving/ @Jonvoge
+
+# Automation
+/.github/workflows/ @Jonvoge
+
+# Schemas
+/schemas/ @Jonvoge
+
+# Domain ownership (add domain owners below)
+# /domains/retail/ @finance-lead @analytics-lead

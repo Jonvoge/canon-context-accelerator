@@ -1,0 +1,183 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://canon.dev/schema/metrics.v1.json",
+  "title": "Canon metrics.yaml",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "domain", "metrics"],
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0" },
+    "domain": { "$ref": "#/$defs/slug" },
+    "metrics": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/metric" },
+      "default": []
+    }
+  },
+  "$defs": {
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "isoDate": {
+      "type": "string",
+      "format": "date"
+    },
+    "stringArray": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/nonEmptyString" },
+      "uniqueItems": true,
+      "default": []
+    },
+    "platform": {
+      "type": "string",
+      "enum": ["fabric", "powerbi", "snowflake", "databricks", "generic_sql", "other"]
+    },
+    "sourceType": {
+      "type": "string",
+      "enum": ["semantic_model", "sql_endpoint", "table", "view", "metric_view", "semantic_view"]
+    },
+    "formatting": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+        "precision": { "type": "integer", "minimum": 0, "maximum": 6 },
+        "display": { "$ref": "#/$defs/nonEmptyString" },
+        "conversational": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["platform", "type"],
+      "properties": {
+        "platform": { "$ref": "#/$defs/platform" },
+        "type": { "$ref": "#/$defs/sourceType" },
+        "workspace": { "$ref": "#/$defs/nonEmptyString" },
+        "model": { "$ref": "#/$defs/nonEmptyString" },
+        "measure": { "$ref": "#/$defs/nonEmptyString" },
+        "lakehouse": { "$ref": "#/$defs/nonEmptyString" },
+        "warehouse": { "$ref": "#/$defs/nonEmptyString" },
+        "database": { "$ref": "#/$defs/nonEmptyString" },
+        "catalog": { "$ref": "#/$defs/nonEmptyString" },
+        "schema": { "$ref": "#/$defs/nonEmptyString" },
+        "object": { "$ref": "#/$defs/nonEmptyString" },
+        "sql": { "$ref": "#/$defs/nonEmptyString" },
+        "endpoint": { "$ref": "#/$defs/nonEmptyString" },
+        "known_discrepancy": { "$ref": "#/$defs/nonEmptyString" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "semantic_model" } } },
+          "then": { "required": ["model", "measure"] }
+        },
+        {
+          "if": { "properties": { "type": { "const": "sql_endpoint" } } },
+          "then": { "required": ["schema", "sql"] }
+        },
+        {
+          "if": { "properties": { "type": { "enum": ["table", "view", "metric_view", "semantic_view"] } } },
+          "then": { "required": ["schema", "object"] }
+        },
+        {
+          "if": { "properties": { "platform": { "const": "fabric" } } },
+          "then": { "required": ["workspace"] }
+        }
+      ]
+    },
+    "governedSources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["primary"],
+      "properties": {
+        "primary": { "$ref": "#/$defs/source" },
+        "also_exists_in": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/source" },
+          "default": []
+        }
+      }
+    },
+    "warehouseSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["platform", "type", "schema", "sql"],
+      "properties": {
+        "platform": { "$ref": "#/$defs/platform" },
+        "type": { "type": "string", "const": "sql_endpoint" },
+        "workspace": { "$ref": "#/$defs/nonEmptyString" },
+        "lakehouse": { "$ref": "#/$defs/nonEmptyString" },
+        "warehouse": { "$ref": "#/$defs/nonEmptyString" },
+        "database": { "$ref": "#/$defs/nonEmptyString" },
+        "catalog": { "$ref": "#/$defs/nonEmptyString" },
+        "schema": { "$ref": "#/$defs/nonEmptyString" },
+        "sql": { "$ref": "#/$defs/nonEmptyString" },
+        "endpoint": { "$ref": "#/$defs/nonEmptyString" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "platform": { "const": "fabric" } } },
+          "then": { "required": ["workspace"] }
+        }
+      ]
+    },
+    "usagePattern": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["question", "source"],
+      "properties": {
+        "question": { "$ref": "#/$defs/nonEmptyString" },
+        "source": { "type": "string", "enum": ["primary", "warehouse", "also_exists_in"] },
+        "sql": { "$ref": "#/$defs/nonEmptyString" },
+        "dax": { "$ref": "#/$defs/nonEmptyString" },
+        "notes": { "$ref": "#/$defs/nonEmptyString" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "source": { "const": "warehouse" } } },
+          "then": { "required": ["sql"] }
+        }
+      ]
+    },
+    "metric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "domain",
+        "owner",
+        "last_reviewed",
+        "status",
+        "definition",
+        "governed_sources",
+        "routing",
+        "sensitivity"
+      ],
+      "properties": {
+        "name": { "$ref": "#/$defs/nonEmptyString" },
+        "domain": { "$ref": "#/$defs/slug" },
+        "owner": { "$ref": "#/$defs/nonEmptyString" },
+        "last_reviewed": { "$ref": "#/$defs/isoDate" },
+        "status": { "type": "string", "enum": ["active", "draft", "deprecated"] },
+        "aliases": { "$ref": "#/$defs/stringArray" },
+        "definition": { "$ref": "#/$defs/nonEmptyString" },
+        "formatting": { "$ref": "#/$defs/formatting" },
+        "governed_sources": { "$ref": "#/$defs/governedSources" },
+        "warehouse": { "$ref": "#/$defs/warehouseSource" },
+        "routing": { "$ref": "#/$defs/nonEmptyString" },
+        "usage_patterns": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/usagePattern" },
+          "default": []
+        },
+        "depends_on": { "$ref": "#/$defs/stringArray" },
+        "sensitivity": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    }
+  }
+}

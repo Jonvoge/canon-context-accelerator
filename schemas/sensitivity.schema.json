@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://canon.dev/schema/sensitivity.v1.json",
+  "title": "Canon sensitivity.yaml",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "domain",
+    "default_classification",
+    "classifications",
+    "usage_rules"
+  ],
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0" },
+    "domain": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "default_classification": { "type": "string", "minLength": 1 },
+    "classifications": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/classification" },
+      "minItems": 1
+    },
+    "usage_rules": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/usageRule" },
+      "default": []
+    },
+    "column_overrides": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/columnOverride" },
+      "default": []
+    },
+    "metric_overrides": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/metricOverride" },
+      "default": []
+    },
+    "dimension_overrides": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/dimensionOverride" },
+      "default": []
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "classification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "description"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "description": { "$ref": "#/$defs/nonEmptyString" },
+        "agent_guidance": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    },
+    "usageRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "instruction", "applies_to"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "instruction": { "$ref": "#/$defs/nonEmptyString" },
+        "applies_to": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/nonEmptyString" },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "forbid_raw_values": { "type": "boolean", "default": false },
+        "allow_aggregates_only": { "type": "boolean", "default": false },
+        "notes": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    },
+    "columnOverride": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["column", "classification"],
+      "properties": {
+        "column": { "$ref": "#/$defs/nonEmptyString" },
+        "classification": { "$ref": "#/$defs/nonEmptyString" },
+        "pii": { "type": "boolean", "default": false },
+        "notes": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    },
+    "metricOverride": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metric", "classification"],
+      "properties": {
+        "metric": { "$ref": "#/$defs/nonEmptyString" },
+        "classification": { "$ref": "#/$defs/nonEmptyString" },
+        "notes": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    },
+    "dimensionOverride": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dimension", "classification"],
+      "properties": {
+        "dimension": { "$ref": "#/$defs/nonEmptyString" },
+        "classification": { "$ref": "#/$defs/nonEmptyString" },
+        "pii": { "type": "boolean", "default": false },
+        "notes": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    }
+  }
+}

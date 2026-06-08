@@ -1,0 +1,80 @@
+name: Canon Setup
+on:
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Ensure labels exist
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const labels = [
+              { name: 'canon', color: '0052CC', description: 'Canon context layer' },
+              { name: 'drift', color: 'D93F0B', description: 'Drift finding from scan' },
+              { name: 'undocumented-measure', color: 'FBCA04', description: 'Measure in platform but not in Canon' },
+              { name: 'orphaned-definition', color: 'E4E669', description: 'Canon definition with no platform source' },
+              { name: 'missing-source', color: 'F9D0C4', description: 'Authored source pointer not found' },
+              { name: 'dimension-values', color: 'C5DEF5', description: 'Dimension value drift' },
+              { name: 'needs-review', color: '006B75', description: 'Awaiting human review' },
+            ];
+            for (const label of labels) {
+              try {
+                await github.rest.issues.createLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  ...label,
+                });
+              } catch (e) {
+                if (e.status !== 422) throw e;
+              }
+            }
+
+      - name: Validate repo structure
+        run: |
+          echo "Checking required directories..."
+          test -d domains/_template || (echo "FAIL: domains/_template missing" && exit 1)
+          test -d schemas || (echo "FAIL: schemas/ missing" && exit 1)
+          test -f scan-config.yaml || (echo "FAIL: scan-config.yaml missing" && exit 1)
+          test -f CODEOWNERS || (echo "FAIL: CODEOWNERS missing" && exit 1)
+          echo "All checks passed."
+
+      - name: Open setup checklist issue
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const title = 'Canon Setup Checklist';
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'canon',
+            });
+            const existing = issues.find(i => i.title === title);
+            if (!existing) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                labels: ['canon'],
+                body: `## Setup Checklist\n\n- [ ] Configure service principal secrets (Actions secrets)\n- [ ] Update scan-config.yaml with real connector bindings\n- [ ] Update CODEOWNERS with domain owners\n- [ ] Create first domain with \`canon init --domain <slug>\`\n- [ ] Run bootstrap scan\n- [ ] Enable scheduled scan workflow\n- [ ] Enable scheduled eval workflow\n`,
+              });
+            }

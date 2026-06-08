@@ -1,0 +1,53 @@
+name: Canon Scan
+on:
+  schedule:
+    - cron: '0 6 * * 1'  # Monday 06:00 UTC
+  workflow_dispatch:
+    inputs:
+      domain:
+        description: 'Domain to scan (leave empty for all)'
+        required: false
+        type: string
+
+permissions:
+  issues: write
+  contents: write
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Run structural scan
+        env:
+          CANON_FABRIC_CLIENT_SECRET: ${{ secrets.CANON_FABRIC_CLIENT_SECRET }}
+          CANON_FABRIC_TENANT_ID: ${{ secrets.CANON_FABRIC_TENANT_ID }}
+          CANON_FABRIC_CLIENT_ID: ${{ secrets.CANON_FABRIC_CLIENT_ID }}
+        run: |
+          DOMAIN="${{ inputs.domain }}"
+          if [ -z "$DOMAIN" ]; then
+            echo "Scanning all domains..."
+            uv run canon scan --domain retail --config scan-config.yaml
+          else
+            echo "Scanning domain: $DOMAIN"
+            uv run canon scan --domain "$DOMAIN" --config scan-config.yaml
+          fi
+
+      - name: Upload scan cache
+        uses: actions/upload-artifact@v4
+        with:
+          name: scan-cache
+          path: .canon-cache/
+          retention-days: 30

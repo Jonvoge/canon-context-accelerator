@@ -1,0 +1,65 @@
+name: "Drift: Missing Source"
+description: "An authored source pointer cannot be found in the platform."
+title: "[Drift] Missing Source: "
+labels: ["canon", "drift", "missing-source"]
+body:
+  - type: input
+    id: domain
+    attributes:
+      label: Domain
+      placeholder: retail
+    validations:
+      required: true
+
+  - type: input
+    id: affected_item
+    attributes:
+      label: Affected Metric or Rule
+      placeholder: "Total Revenue"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: missing_source_type
+    attributes:
+      label: Missing Source Type
+      options:
+        - workspace
+        - model
+        - measure
+        - table
+        - column
+        - sql_endpoint
+    validations:
+      required: true
+
+  - type: textarea
+    id: authored_payload
+    attributes:
+      label: Authored Source Payload
+      description: "The full source definition from metrics.yaml"
+      render: yaml
+    validations:
+      required: true
+
+  - type: input
+    id: connector_id
+    attributes:
+      label: Connector ID
+      placeholder: "retail-semantic"
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - high
+        - medium
+        - low
+    validations:
+      required: true
+
+  - type: input
+    id: scan_run_id
+    attributes:
+      label: Scan Run ID

@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=../../schemas/glossary.schema.json
+schema_version: "1.0"
+domain: retail
+terms:
+  - name: Promotional Bundle
+    definition: >
+      A pre-packaged combination of products sold at a discounted price during campaign periods.
+      Revenue from promotional bundles is excluded from Total Revenue per Finance decision 2026-04-22.
+    aliases:
+      - bundle
+      - promo bundle
+    related_metrics:
+      - Total Revenue
+    status: active
+    owner: Retail Analytics Team
+
+  - name: Comparable Store
+    definition: >
+      A store that has been open for at least 12 full months and has not undergone major renovation
+      (floor area change > 20%) during the comparison period.
+    aliases:
+      - comp store
+      - like-for-like store
+    related_dimensions:
+      - Store Region
+    status: active
+    owner: Retail Analytics Team

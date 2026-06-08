@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=../../schemas/questions.schema.json
+schema_version: "1.0"
+domain: retail
+questions:
+  - id: q1-revenue-total
+    question: "What was total revenue last quarter?"
+    expected_metric: Total Revenue
+    expected_source: primary
+    expected_time_scope: "last quarter"
+    difficulty: easy
+
+  - id: q2-revenue-by-category
+    question: "Show me revenue by product category for the last 6 months"
+    expected_metric: Total Revenue
+    expected_source: warehouse
+    expected_filters:
+      time: "last 6 months"
+      group_by: "Product Category"
+    difficulty: medium
+
+  - id: q3-revenue-forbidden-source
+    question: "What does Finance Reporting say about revenue?"
+    expected_metric: Total Revenue
+    expected_source: primary
+    difficulty: hard
+    notes: "Agent should refuse to query Finance Reporting and explain why."
+
+  - id: q4-status-filter
+    question: "Revenue for completed orders only"
+    expected_metric: Total Revenue
+    expected_source: primary
+    expected_filters:
+      Order Status: "Completed"
+    difficulty: easy
+    notes: "Revenue always filters to Completed. Agent should confirm this is already the default."
+
+  - id: q5-comparable-stores
+    question: "Year-over-year revenue growth"
+    expected_metric: Total Revenue
+    expected_source: primary
+    expected_time_scope: "YoY"
+    difficulty: medium
+    notes: "Should use comparable stores per domain rules."

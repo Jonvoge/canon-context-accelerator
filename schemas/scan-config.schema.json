@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://canon.dev/schema/scan-config.v1.json",
+  "title": "Canon scan-config.yaml",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "scanner", "schedules", "connectors", "domains"],
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0" },
+    "scanner": { "$ref": "#/$defs/scanner" },
+    "schedules": { "$ref": "#/$defs/schedules" },
+    "connectors": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/connector" },
+      "minItems": 1
+    },
+    "domains": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/domainConfig" },
+      "minItems": 1
+    }
+  },
+  "$defs": {
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "connectorType": {
+      "type": "string",
+      "enum": ["fabric_semantic", "fabric_sql", "snowflake", "databricks"]
+    },
+    "scanner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["distinct_value_cap", "max_workers", "stale_after_hours"],
+      "properties": {
+        "distinct_value_cap": { "type": "integer", "minimum": 1, "maximum": 5000 },
+        "max_workers": { "type": "integer", "minimum": 1, "maximum": 32 },
+        "stale_after_hours": { "type": "integer", "minimum": 1 },
+        "fail_on_schema_error": { "type": "boolean", "default": true },
+        "publish_cache_artifact": { "type": "boolean", "default": true }
+      }
+    },
+    "schedules": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scan_cron", "eval_cron", "timezone"],
+      "properties": {
+        "scan_cron": { "$ref": "#/$defs/nonEmptyString" },
+        "eval_cron": { "$ref": "#/$defs/nonEmptyString" },
+        "timezone": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    },
+    "connector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "auth_secret_name"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "type": { "$ref": "#/$defs/connectorType" },
+        "auth_secret_name": { "$ref": "#/$defs/nonEmptyString" },
+        "options": {
+          "type": "object",
+          "additionalProperties": {
+            "type": ["string", "number", "boolean"]
+          },
+          "default": {}
+        }
+      }
+    },
+    "escalation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["manager", "high_priority_days", "low_priority_auto_close_days"],
+      "properties": {
+        "manager": { "$ref": "#/$defs/nonEmptyString" },
+        "high_priority_days": { "type": "integer", "minimum": 1 },
+        "low_priority_auto_close_days": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "domainConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "path",
+        "owners",
+        "profile_dimensions",
+        "issue_labels",
+        "escalation"
+      ],
+      "properties": {
+        "name": { "$ref": "#/$defs/slug" },
+        "path": { "$ref": "#/$defs/nonEmptyString" },
+        "owners": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/nonEmptyString" },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "semantic_connector": { "$ref": "#/$defs/slug" },
+        "warehouse_connector": { "$ref": "#/$defs/slug" },
+        "profile_dimensions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/nonEmptyString" },
+          "uniqueItems": true,
+          "default": []
+        },
+        "issue_labels": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/nonEmptyString" },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "digest_target": { "$ref": "#/$defs/nonEmptyString" },
+        "escalation": { "$ref": "#/$defs/escalation" }
+      }
+    }
+  }
+}

@@ -1,0 +1,29 @@
+# yaml-language-server: $schema=../../schemas/sensitivity.schema.json
+schema_version: "1.0"
+domain: __DOMAIN_SLUG__
+default_classification: internal
+
+classifications:
+  - id: public
+    description: "Information that can be shared externally without restriction."
+    agent_guidance: "No restrictions on how this data is presented or shared."
+
+  - id: internal
+    description: "Standard business data. Not sensitive, but not for public distribution."
+    agent_guidance: "Can be shown to authenticated users. Do not expose in public-facing outputs."
+
+  - id: confidential
+    description: "Sensitive business data requiring need-to-know access."
+    agent_guidance: "Only present to users with explicit access. Aggregate where possible."
+
+  - id: restricted
+    description: "Highly sensitive data (PII, financial forecasts, legal matters)."
+    agent_guidance: "Never return raw values. Only aggregates with minimum group size. Flag if query appears to target individual records."
+
+usage_rules:
+  - id: block-restricted-raw
+    instruction: "Never return raw row-level values for restricted data. Only aggregates with 5+ records."
+    applies_to:
+      - restricted
+    forbid_raw_values: true
+    allow_aggregates_only: true

@@ -1,0 +1,62 @@
+name: "Drift: Dimension Values"
+description: "New, removed, or renamed values detected in an enumerated dimension."
+title: "[Drift] Dimension Values: "
+labels: ["canon", "drift", "dimension-values"]
+body:
+  - type: input
+    id: domain
+    attributes:
+      label: Domain
+      placeholder: retail
+    validations:
+      required: true
+
+  - type: input
+    id: dimension_name
+    attributes:
+      label: Dimension Name
+      placeholder: "Order Status"
+    validations:
+      required: true
+
+  - type: textarea
+    id: added_values
+    attributes:
+      label: Added Values
+      description: "New values not previously seen"
+      placeholder: "- Pending\n- On Hold"
+
+  - type: textarea
+    id: removed_values
+    attributes:
+      label: Removed Values
+      description: "Values no longer present"
+      placeholder: "- Processing"
+
+  - type: input
+    id: profiled_timestamp
+    attributes:
+      label: Profiled Sample Timestamp
+      placeholder: "2026-06-01T06:00:00Z"
+
+  - type: input
+    id: owner
+    attributes:
+      label: Owner
+      placeholder: "@retail-analytics-team"
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - high
+        - medium
+        - low
+    validations:
+      required: true
+
+  - type: input
+    id: scan_run_id
+    attributes:
+      label: Scan Run ID

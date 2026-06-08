@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://canon.dev/schema/ontology.v1.json",
+  "title": "Canon ontology.yaml",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "domain", "dimensions"],
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0" },
+    "domain": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "dimensions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/dimension" },
+      "default": []
+    }
+  },
+  "$defs": {
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "stringArray": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/nonEmptyString" },
+      "uniqueItems": true,
+      "default": []
+    },
+    "valueDescriptions": {
+      "type": "object",
+      "propertyNames": { "minLength": 1 },
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      },
+      "default": {}
+    },
+    "dimension": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "column", "enumerate"],
+      "properties": {
+        "name": { "$ref": "#/$defs/nonEmptyString" },
+        "column": { "$ref": "#/$defs/nonEmptyString" },
+        "aliases": { "$ref": "#/$defs/stringArray" },
+        "enumerate": { "type": "boolean" },
+        "hierarchy": { "$ref": "#/$defs/stringArray" },
+        "value_descriptions": { "$ref": "#/$defs/valueDescriptions" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "enumerate": { "const": false } } },
+          "then": {
+            "not": {
+              "anyOf": [
+                { "required": ["value_descriptions"] },
+                { "required": ["hierarchy"] }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

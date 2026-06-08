@@ -1,0 +1,64 @@
+name: "Drift: Undocumented Measure"
+description: "A measure was found in the platform but has no Canon definition."
+title: "[Drift] Undocumented: "
+labels: ["canon", "drift", "undocumented-measure"]
+body:
+  - type: input
+    id: domain
+    attributes:
+      label: Domain
+      placeholder: retail
+    validations:
+      required: true
+
+  - type: input
+    id: measure_name
+    attributes:
+      label: Discovered Measure Name
+      placeholder: "Gross Margin %"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - fabric
+        - powerbi
+        - snowflake
+        - databricks
+    validations:
+      required: true
+
+  - type: input
+    id: source_path
+    attributes:
+      label: Source Path
+      description: "workspace/model/measure or equivalent"
+      placeholder: "Retail Analytics / Retail Planning / Gross Margin %"
+    validations:
+      required: true
+
+  - type: input
+    id: suggested_owner
+    attributes:
+      label: Suggested Owner
+      placeholder: "@finance-lead"
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - high
+        - medium
+        - low
+    validations:
+      required: true
+
+  - type: input
+    id: scan_run_id
+    attributes:
+      label: Scan Run ID
+      description: "GitHub Actions run ID that detected this"

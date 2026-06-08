@@ -1,0 +1,49 @@
+# yaml-language-server: $schema=schemas/scan-config.schema.json
+schema_version: "1.0"
+
+scanner:
+  distinct_value_cap: 500
+  max_workers: 4
+  stale_after_hours: 168  # 7 days
+  fail_on_schema_error: true
+  publish_cache_artifact: true
+
+schedules:
+  scan_cron: "0 6 * * 1"  # Monday 06:00
+  eval_cron: "0 7 * * 1"  # Monday 07:00
+  timezone: "Europe/Copenhagen"
+
+connectors:
+  - id: retail-semantic
+    type: fabric_semantic
+    auth_secret_name: CANON_FABRIC_CLIENT_SECRET
+    options:
+      workspace: "Retail Analytics"
+      dataset: "Retail Reporting"
+
+  - id: retail-sql
+    type: fabric_sql
+    auth_secret_name: CANON_FABRIC_CLIENT_SECRET
+    options:
+      workspace: "Retail Analytics"
+      endpoint: "retail-lakehouse-sql"
+
+domains:
+  - name: retail
+    path: domains/retail
+    owners:
+      - "@finance-lead"
+    semantic_connector: retail-semantic
+    warehouse_connector: retail-sql
+    profile_dimensions:
+      - Order Status
+      - Product Category
+      - Store Region
+    issue_labels:
+      - "domain:retail"
+      - "drift"
+    digest_target: "finance-lead@company.com"
+    escalation:
+      manager: "@analytics-lead"
+      high_priority_days: 3
+      low_priority_auto_close_days: 30
