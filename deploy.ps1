@@ -29,6 +29,11 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+# Fix Windows cp1252 encoding crash in az CLI log streaming
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$env:PYTHONUTF8 = "1"
+$env:PYTHONIOENCODING = "utf-8"
+
 # Load .env file if present (never committed — secrets live here)
 $envFile = Join-Path $PSScriptRoot ".env"
 if (Test-Path $envFile) {
@@ -105,20 +110,37 @@ $botImage = "${acrLoginServer}/${BotApp}:${gitHash}"
 
 if (-not $SkipBuild) {
     if (-not $BotOnly) {
-        Write-Step "Building MCP server image"
+        Write-Step "Building MCP server image (tag: $gitHash)"
         az acr build --registry $AcrName --resource-group $ResourceGroup `
             --image "${McpApp}:${gitHash}" `
             --file "$repoRoot\Dockerfile" `
-            "$repoRoot" | Out-Null
+            --no-logs `
+            "$repoRoot"
+        # Wait for image to appear in registry
+        Write-Host "Waiting for image..."
+        $deadline = (Get-Date).AddMinutes(15)
+        do {
+            Start-Sleep -Seconds 15
+            $found = az acr repository show-tags --name $AcrName --repository $McpApp --query "[?@=='$gitHash']" -o tsv 2>$null
+        } while (-not $found -and (Get-Date) -lt $deadline)
+        if (-not $found) { throw "MCP image $mcpImage not found in ACR after 15 min" }
         Write-Host "Built: $mcpImage"
     }
 
     if (-not $McpOnly) {
-        Write-Step "Building bot image"
+        Write-Step "Building bot image (tag: $gitHash)"
         az acr build --registry $AcrName --resource-group $ResourceGroup `
             --image "${BotApp}:${gitHash}" `
             --file "$repoRoot\Dockerfile.bot" `
-            "$repoRoot" | Out-Null
+            --no-logs `
+            "$repoRoot"
+        Write-Host "Waiting for image..."
+        $deadline = (Get-Date).AddMinutes(15)
+        do {
+            Start-Sleep -Seconds 15
+            $found = az acr repository show-tags --name $AcrName --repository $BotApp --query "[?@=='$gitHash']" -o tsv 2>$null
+        } while (-not $found -and (Get-Date) -lt $deadline)
+        if (-not $found) { throw "Bot image $botImage not found in ACR after 15 min" }
         Write-Host "Built: $botImage"
     }
 }
