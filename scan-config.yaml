@@ -18,15 +18,15 @@ connectors:
     type: fabric_semantic
     auth_secret_name: CANON_FABRIC_CLIENT_SECRET
     options:
-      workspace: "Retail Analytics"
-      dataset: "Retail Reporting"
+      workspace_id: "b53e615a-ab79-49f9-bcf0-67250a34f633"
+      dataset_name: "Retail Planning"
 
   - id: retail-sql
     type: fabric_sql
     auth_secret_name: CANON_FABRIC_CLIENT_SECRET
     options:
-      workspace: "Retail Analytics"
-      endpoint: "retail-lakehouse-sql"
+      server: "eibo3j4ddcgerc53n3spaq62nu-ljqt5nlzvp4utphqm4squnhwgm.database.fabric.microsoft.com,1433"
+      database: "RetailDemoDB-e152e30b-3c31-4b9e-93e2-307de0004d9e"
 
 domains:
   - name: retail

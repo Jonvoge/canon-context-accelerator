@@ -195,38 +195,35 @@ async def run_stdio_server(repo_root: Path) -> None:
 
 
 async def run_http_server(repo_root: Path, port: int = 8000) -> None:
-    from aiohttp import web
-    from mcp.server.sse import SseServerTransport
+    import uvicorn
+    from starlette.applications import Starlette
+    from starlette.requests import Request
+    from starlette.responses import JSONResponse
+    from starlette.routing import Mount, Route
+    from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 
     app = create_app(repo_root)
-    mcp_app = web.Application()
-    transport = SseServerTransport("/messages")
+    session_manager = StreamableHTTPSessionManager(app, json_response=True, stateless=True)
 
-    async def handle_sse(request: web.Request) -> web.Response:
-        async with transport.connect_sse(request.path, request) as (read, write):
-            await app.run(read, write, app.create_initialization_options())
-        return web.Response()
+    async def handle_mcp(scope, receive, send):
+        await session_manager.handle_request(scope, receive, send)
 
-    async def healthz(request: web.Request) -> web.Response:
-        return web.json_response({"status": "ok"})
+    async def healthz(request: Request) -> JSONResponse:
+        return JSONResponse({"status": "ok"})
 
-    mcp_app.router.add_get("/sse", handle_sse)
-    mcp_app.router.add_post("/messages", transport.handle_post_message)
-    mcp_app.router.add_get("/healthz", healthz)
-    mcp_app.router.add_get("/readyz", healthz)
+    starlette_app = Starlette(
+        routes=[
+            Route("/healthz", healthz, methods=["GET"]),
+            Route("/readyz", healthz, methods=["GET"]),
+            Mount("/mcp", app=handle_mcp),
+        ]
+    )
 
-    runner = web.AppRunner(mcp_app)
-    await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", port)
-    await site.start()
-    logger.info("Canon MCP server running on http://0.0.0.0:%d", port)
-
-    # Keep alive until interrupted
-    import asyncio
-    try:
-        await asyncio.Event().wait()
-    finally:
-        await runner.cleanup()
+    async with session_manager.run():
+        config = uvicorn.Config(starlette_app, host="0.0.0.0", port=port, log_level="info")
+        server = uvicorn.Server(config)
+        logger.info("Canon MCP server running on http://0.0.0.0:%d", port)
+        await server.serve()
 
 
 if __name__ == "__main__":

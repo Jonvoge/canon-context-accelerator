@@ -86,8 +86,8 @@ def _build_connector(connector_config: dict, global_config: dict) -> Any:
     if ctype == "fabric_semantic":
         from connectors.fabric_semantic import FabricSemanticConnector
         return FabricSemanticConnector({
-            "workspace_id": os.environ.get("CANON_FABRIC_WORKSPACE_ID", ""),
-            "dataset_name": options.get("dataset", ""),
+            "workspace_id": os.environ.get("CANON_FABRIC_WORKSPACE_ID", options.get("workspace_id", "")),
+            "dataset_name": os.environ.get("CANON_FABRIC_DATASET_NAME", options.get("dataset_name", "")),
             "tenant_id": tenant_id,
             "client_id": client_id,
             "client_secret": client_secret,
