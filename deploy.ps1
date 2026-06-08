@@ -16,7 +16,7 @@
 param(
     [string]$ResourceGroup  = $env:AZURE_RESOURCE_GROUP ?? "rg-canon",
     [string]$Location       = $env:AZURE_LOCATION       ?? "northeurope",
-    [string]$AcrName        = $env:AZURE_ACR_NAME       ?? "canonacr",
+    [string]$AcrName        = $env:AZURE_ACR_NAME       ?? "jvcanonacr",
     [string]$AcaEnv         = $env:CANON_ACA_ENV        ?? "canon-env",
     [string]$McpApp         = $env:CANON_MCP_APP        ?? "canon-mcp",
     [string]$BotApp         = $env:CANON_BOT_APP        ?? "canon-bot",
@@ -69,7 +69,10 @@ if (-not $acrExists) {
     az acr create --name $AcrName --resource-group $ResourceGroup `
         --location $Location --sku Basic --admin-enabled true | Out-Null
 }
-$acrLoginServer = az acr show --name $AcrName --query "loginServer" -o tsv
+$acrLoginServer = az acr show --name $AcrName --resource-group $ResourceGroup --query "loginServer" -o tsv 2>$null
+if (-not $acrLoginServer) {
+    throw "ACR '$AcrName' not found in resource group '$ResourceGroup'. Check the name and try again."
+}
 Write-Host "ACR: $acrLoginServer"
 
 # ─── Container Apps environment ───────────────────────────────────────────────
