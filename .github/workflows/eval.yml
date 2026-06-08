@@ -29,8 +29,7 @@ jobs:
 
       - name: Run eval harness
         env:
-          CANON_EVAL_MODEL: ${{ vars.CANON_EVAL_MODEL || 'claude-sonnet-4-20250514' }}
-          CANON_EVAL_API_KEY: ${{ secrets.CANON_EVAL_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           echo "Running eval harness..."
           uv run python evals/run_evals.py

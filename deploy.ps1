@@ -1,0 +1,210 @@
+#!/usr/bin/env pwsh
+<#
+.SYNOPSIS
+    Deploy Canon MCP server and Teams bot to Azure Container Apps.
+
+.DESCRIPTION
+    1. Create resource group, ACR, and Container Apps environment (idempotent)
+    2. Build and push both images via ACR Tasks (no local Docker required)
+    3. Create or update the Container Apps
+
+.EXAMPLE
+    .\deploy.ps1 -ResourceGroup rg-canon -Location northeurope
+#>
+
+[CmdletBinding()]
+param(
+    [string]$ResourceGroup  = $env:AZURE_RESOURCE_GROUP ?? "rg-canon",
+    [string]$Location       = $env:AZURE_LOCATION       ?? "northeurope",
+    [string]$AcrName        = $env:AZURE_ACR_NAME       ?? "canonacr",
+    [string]$AcaEnv         = $env:CANON_ACA_ENV        ?? "canon-env",
+    [string]$McpApp         = $env:CANON_MCP_APP        ?? "canon-mcp",
+    [string]$BotApp         = $env:CANON_BOT_APP        ?? "canon-bot",
+    [string]$SubscriptionId = $env:AZURE_SUBSCRIPTION_ID,
+    [switch]$SkipBuild,
+    [switch]$McpOnly,
+    [switch]$BotOnly
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+# ─── Helpers ──────────────────────────────────────────────────────────────────
+function Write-Step([string]$msg) {
+    Write-Host "`n==> $msg" -ForegroundColor Cyan
+}
+
+function Require-EnvVar([string]$name) {
+    $val = [System.Environment]::GetEnvironmentVariable($name)
+    if (-not $val) { throw "Required env var '$name' is not set." }
+    return $val
+}
+
+# ─── Validate required secrets ────────────────────────────────────────────────
+$tenantId        = Require-EnvVar "CANON_FABRIC_TENANT_ID"
+$clientId        = Require-EnvVar "CANON_FABRIC_CLIENT_ID"
+$clientSecret    = Require-EnvVar "CANON_FABRIC_CLIENT_SECRET"
+$workspaceId     = Require-EnvVar "CANON_FABRIC_WORKSPACE_ID"
+$datasetName     = $env:CANON_FABRIC_DATASET_NAME ?? ""
+$sqlServer       = $env:CANON_SQL_SERVER          ?? ""
+$sqlDatabase     = $env:CANON_SQL_DATABASE        ?? ""
+$anthropicKey    = Require-EnvVar "ANTHROPIC_API_KEY"
+$msAppId         = Require-EnvVar "MICROSOFT_APP_ID"
+$msAppPassword   = Require-EnvVar "MICROSOFT_APP_PASSWORD"
+$githubRepo      = Require-EnvVar "CANON_GITHUB_REPO"
+$githubToken     = Require-EnvVar "CANON_GITHUB_TOKEN"
+
+if ($SubscriptionId) {
+    az account set --subscription $SubscriptionId
+}
+
+# ─── Resource group ───────────────────────────────────────────────────────────
+Write-Step "Resource group: $ResourceGroup ($Location)"
+az group create --name $ResourceGroup --location $Location | Out-Null
+
+# ─── ACR ──────────────────────────────────────────────────────────────────────
+Write-Step "Container Registry: $AcrName"
+$acrExists = az acr show --name $AcrName --resource-group $ResourceGroup 2>$null
+if (-not $acrExists) {
+    az acr create --name $AcrName --resource-group $ResourceGroup `
+        --location $Location --sku Basic --admin-enabled true | Out-Null
+}
+$acrLoginServer = az acr show --name $AcrName --query "loginServer" -o tsv
+Write-Host "ACR: $acrLoginServer"
+
+# ─── Container Apps environment ───────────────────────────────────────────────
+Write-Step "Container Apps environment: $AcaEnv"
+$acaEnvExists = az containerapp env show --name $AcaEnv `
+    --resource-group $ResourceGroup 2>$null
+if (-not $acaEnvExists) {
+    az containerapp env create --name $AcaEnv --resource-group $ResourceGroup `
+        --location $Location | Out-Null
+}
+
+# ─── Build images ─────────────────────────────────────────────────────────────
+$repoRoot = $PSScriptRoot
+$gitHash  = (git -C $repoRoot rev-parse --short HEAD 2>$null) ?? "latest"
+$mcpImage = "${acrLoginServer}/${McpApp}:${gitHash}"
+$botImage = "${acrLoginServer}/${BotApp}:${gitHash}"
+
+if (-not $SkipBuild) {
+    if (-not $BotOnly) {
+        Write-Step "Building MCP server image"
+        az acr build --registry $AcrName --resource-group $ResourceGroup `
+            --image "${McpApp}:${gitHash}" `
+            --file "$repoRoot\Dockerfile" `
+            "$repoRoot" | Out-Null
+        Write-Host "Built: $mcpImage"
+    }
+
+    if (-not $McpOnly) {
+        Write-Step "Building bot image"
+        az acr build --registry $AcrName --resource-group $ResourceGroup `
+            --image "${BotApp}:${gitHash}" `
+            --file "$repoRoot\Dockerfile.bot" `
+            "$repoRoot" | Out-Null
+        Write-Host "Built: $botImage"
+    }
+}
+
+# ─── ACR credentials for Container Apps ──────────────────────────────────────
+$acrUser     = az acr credential show --name $AcrName --query "username" -o tsv
+$acrPassword = az acr credential show --name $AcrName --query "passwords[0].value" -o tsv
+
+# ─── MCP server Container App ─────────────────────────────────────────────────
+if (-not $BotOnly) {
+    Write-Step "Deploying MCP server: $McpApp"
+
+    $mcpExists = az containerapp show --name $McpApp `
+        --resource-group $ResourceGroup 2>$null
+
+    $mcpEnvVars = @(
+        "CANON_FABRIC_TENANT_ID=$tenantId"
+        "CANON_FABRIC_CLIENT_ID=$clientId"
+        "CANON_FABRIC_CLIENT_SECRET=secretref:fabric-client-secret"
+        "CANON_FABRIC_WORKSPACE_ID=$workspaceId"
+        "CANON_FABRIC_DATASET_NAME=$datasetName"
+        "CANON_SQL_SERVER=$sqlServer"
+        "CANON_SQL_DATABASE=$sqlDatabase"
+        "CANON_MCP_TRANSPORT=streamable-http"
+        "CANON_MCP_PORT=8000"
+        "CANON_REPO_ROOT=/app"
+    )
+
+    if (-not $mcpExists) {
+        az containerapp create --name $McpApp `
+            --resource-group $ResourceGroup `
+            --environment $AcaEnv `
+            --image $mcpImage `
+            --registry-server $acrLoginServer `
+            --registry-username $acrUser `
+            --registry-password $acrPassword `
+            --target-port 8000 `
+            --ingress external `
+            --min-replicas 1 --max-replicas 3 `
+            --cpu 0.5 --memory 1.0Gi `
+            --secrets "fabric-client-secret=$clientSecret" `
+            --env-vars @mcpEnvVars | Out-Null
+    } else {
+        az containerapp update --name $McpApp `
+            --resource-group $ResourceGroup `
+            --image $mcpImage | Out-Null
+    }
+
+    $mcpUrl = az containerapp show --name $McpApp `
+        --resource-group $ResourceGroup `
+        --query "properties.configuration.ingress.fqdn" -o tsv
+    Write-Host "MCP server: https://$mcpUrl"
+    Write-Host "  Health:   https://$mcpUrl/healthz"
+    Write-Host "  SSE:      https://$mcpUrl/sse"
+}
+
+# ─── Bot Container App ────────────────────────────────────────────────────────
+if (-not $McpOnly) {
+    Write-Step "Deploying Teams bot: $BotApp"
+
+    $botExists = az containerapp show --name $BotApp `
+        --resource-group $ResourceGroup 2>$null
+
+    $botEnvVars = @(
+        "MICROSOFT_APP_ID=$msAppId"
+        "MICROSOFT_APP_PASSWORD=secretref:bot-app-password"
+        "CANON_GITHUB_REPO=$githubRepo"
+        "CANON_GITHUB_TOKEN=secretref:github-token"
+        "ANTHROPIC_API_KEY=secretref:anthropic-key"
+        "BOT_PORT=3978"
+    )
+
+    if (-not $botExists) {
+        az containerapp create --name $BotApp `
+            --resource-group $ResourceGroup `
+            --environment $AcaEnv `
+            --image $botImage `
+            --registry-server $acrLoginServer `
+            --registry-username $acrUser `
+            --registry-password $acrPassword `
+            --target-port 3978 `
+            --ingress external `
+            --min-replicas 1 --max-replicas 2 `
+            --cpu 0.25 --memory 0.5Gi `
+            --secrets `
+                "bot-app-password=$msAppPassword" `
+                "github-token=$githubToken" `
+                "anthropic-key=$anthropicKey" `
+            --env-vars @botEnvVars | Out-Null
+    } else {
+        az containerapp update --name $BotApp `
+            --resource-group $ResourceGroup `
+            --image $botImage | Out-Null
+    }
+
+    $botUrl = az containerapp show --name $BotApp `
+        --resource-group $ResourceGroup `
+        --query "properties.configuration.ingress.fqdn" -o tsv
+    Write-Host "Bot endpoint: https://$botUrl/api/messages"
+    Write-Host ""
+    Write-Host "Configure Azure Bot Service messaging endpoint to:"
+    Write-Host "  https://$botUrl/api/messages"
+}
+
+Write-Step "Done."

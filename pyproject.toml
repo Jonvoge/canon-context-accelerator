@@ -17,6 +17,11 @@ dependencies = [
     "mcp>=1.0",
     "click>=8.1",
     "pyodbc>=5.1",
+    "anthropic>=0.25",
+    "aiohttp>=3.9",
+    "botbuilder-core>=4.15",
+    "botbuilder-integration-aiohttp>=4.15",
+    "gitpython>=3.1",
 ]
 
 [project.optional-dependencies]
@@ -25,6 +30,8 @@ dev = [
     "pytest-asyncio>=0.23",
     "ruff>=0.4",
     "mypy>=1.10",
+    "pytest-mock>=3.14",
+    "respx>=0.21",
 ]
 
 [project.scripts]
@@ -35,7 +42,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["connectors", "serving", "scripts"]
+packages = ["canon", "connectors", "serving", "scripts", "bot"]
 
 [tool.ruff]
 target-version = "py312"

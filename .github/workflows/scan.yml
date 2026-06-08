@@ -35,14 +35,22 @@ jobs:
           CANON_FABRIC_CLIENT_SECRET: ${{ secrets.CANON_FABRIC_CLIENT_SECRET }}
           CANON_FABRIC_TENANT_ID: ${{ secrets.CANON_FABRIC_TENANT_ID }}
           CANON_FABRIC_CLIENT_ID: ${{ secrets.CANON_FABRIC_CLIENT_ID }}
+          CANON_FABRIC_WORKSPACE_ID: ${{ secrets.CANON_FABRIC_WORKSPACE_ID }}
+          CANON_FABRIC_DATASET_NAME: ${{ vars.CANON_FABRIC_DATASET_NAME }}
+          CANON_SQL_SERVER: ${{ secrets.CANON_SQL_SERVER }}
+          CANON_SQL_DATABASE: ${{ secrets.CANON_SQL_DATABASE }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           DOMAIN="${{ inputs.domain }}"
+          REPO="${{ github.repository }}"
           if [ -z "$DOMAIN" ]; then
             echo "Scanning all domains..."
-            uv run canon scan --domain retail --config scan-config.yaml
+            uv run canon scan --domain retail --config scan-config.yaml \
+              --create-issues --github-repo "$REPO" --github-token "$GITHUB_TOKEN"
           else
             echo "Scanning domain: $DOMAIN"
-            uv run canon scan --domain "$DOMAIN" --config scan-config.yaml
+            uv run canon scan --domain "$DOMAIN" --config scan-config.yaml \
+              --create-issues --github-repo "$REPO" --github-token "$GITHUB_TOKEN"
           fi
 
       - name: Upload scan cache

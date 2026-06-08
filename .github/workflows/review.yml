@@ -35,4 +35,4 @@ jobs:
       - name: Cross-file consistency
         run: |
           echo "Running cross-file consistency checks..."
-          uv run python scripts/review_consistency.py
+          uv run canon validate
