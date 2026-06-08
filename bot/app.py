@@ -25,10 +25,12 @@ logger = logging.getLogger(__name__)
 def create_app() -> web.Application:
     microsoft_app_id = os.environ.get("MICROSOFT_APP_ID", "")
     microsoft_app_password = os.environ.get("MICROSOFT_APP_PASSWORD", "")
+    microsoft_app_tenant_id = os.environ.get("MICROSOFT_APP_TENANT_ID", "")
 
     adapter_settings = BotFrameworkAdapterSettings(
         app_id=microsoft_app_id,
         app_password=microsoft_app_password,
+        channel_auth_tenant=microsoft_app_tenant_id,
     )
     adapter = BotFrameworkAdapter(adapter_settings)
     bot = CanonBot()
