@@ -1,0 +1,52 @@
+{
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.17/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.17",
+  "version": "1.0.0",
+  "id": "4f454351-50c0-42e1-be01-295d80f49b3d",
+  "developer": {
+    "name": "Inspari AS",
+    "websiteUrl": "https://github.com/Jonvoge/canon-context-accelerator",
+    "privacyUrl": "https://github.com/Jonvoge/canon-context-accelerator",
+    "termsOfUseUrl": "https://github.com/Jonvoge/canon-context-accelerator"
+  },
+  "icons": {
+    "color": "color.png",
+    "outline": "outline.png"
+  },
+  "name": {
+    "short": "Canon",
+    "full": "Canon — Context Accelerator"
+  },
+  "description": {
+    "short": "Your business context layer — review drift findings, update definitions.",
+    "full": "Canon is a git-backed context layer that keeps business definitions honest. Use this bot to review weekly drift findings, update metric definitions, and get a digest of what changed in your data domain."
+  },
+  "accentColor": "#0078D4",
+  "bots": [
+    {
+      "botId": "4f454351-50c0-42e1-be01-295d80f49b3d",
+      "scopes": ["personal", "team", "groupchat"],
+      "supportsFiles": false,
+      "isNotificationOnly": false,
+      "commandLists": [
+        {
+          "scopes": ["personal", "team", "groupchat"],
+          "commands": [
+            {
+              "title": "review",
+              "description": "Walk through this week's drift findings"
+            },
+            {
+              "title": "digest",
+              "description": "Show the weekly summary of changes"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "permissions": ["identity", "messageTeamMembers"],
+  "validDomains": [
+    "canon-bot.whiteocean-66184c18.northeurope.azurecontainerapps.io"
+  ]
+}
