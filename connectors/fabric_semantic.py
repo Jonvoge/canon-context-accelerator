@@ -138,7 +138,7 @@ class FabricSemanticConnector(BaseConnector):
         }
         resp = requests.post(url, json=payload, headers=self._headers(), timeout=60)
 
-        if resp.status_code == 400 and self._use_view:
+        if resp.status_code == 400 and self._use_view and "INFO.VIEW." in query:
             logger.warning("INFO.VIEW.* returned 400, falling back to INFO.*() — %s", resp.text[:200])
             self._use_view = False
             return self._execute_dax(query.replace("INFO.VIEW.", "INFO."))

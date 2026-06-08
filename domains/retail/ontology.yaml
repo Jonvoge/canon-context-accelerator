@@ -2,41 +2,34 @@
 schema_version: "1.0"
 domain: retail
 dimensions:
-  - name: Order Status
-    column: Sales.Status
-    aliases:
-      - status
-      - order state
-    enumerate: true
-    value_descriptions:
-      Completed: "Delivered and paid. Only status used in revenue calcs."
-      Cancelled: "Unreliable before March 2024."
-
   - name: Product Category
-    column: Products.Category
+    column: dim_product.category
     aliases:
       - category
       - product type
       - product group
     enumerate: true
     hierarchy:
-      - Category
-      - SubCategory
-    value_descriptions:
-      Electronics: "Consumer electronics and components. Accessories split out June 2025."
-      Accessories: "Valid from 2025-06-01."
+      - category
+      - sub_category
+    value_descriptions: {}
 
   - name: Store Region
-    column: Stores.Region
+    column: dim_geography.region
     aliases:
       - region
       - geography
     enumerate: true
-    value_descriptions:
-      North: "Jutland and North Zealand"
-      South: "South Zealand, Funen, Lolland-Falster"
-      Capital: "Greater Copenhagen area"
+    value_descriptions: {}
+
+  - name: Customer Segment
+    column: dim_customer.segment
+    aliases:
+      - segment
+      - customer type
+    enumerate: true
+    value_descriptions: {}
 
   - name: Customer ID
-    column: Customers.CustomerID
+    column: dim_customer.customer_id
     enumerate: false
