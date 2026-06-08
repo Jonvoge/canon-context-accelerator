@@ -59,8 +59,8 @@ def _load_yaml(path: Path) -> dict:
     return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
 
 
-def _load_scan_config(config_path: Path) -> dict:
-    return yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+def _load_scan_config(config_path: Path | str) -> dict:
+    return yaml.safe_load(Path(config_path).read_text(encoding="utf-8")) or {}
 
 
 def _get_domain_config(config: dict, domain: str) -> dict:

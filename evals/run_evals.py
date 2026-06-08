@@ -3,13 +3,16 @@ Canon evaluation harness.
 
 For each question in evals/{domain}/questions.yaml:
   1. Assemble domain context via the MCP serving layer
-  2. Feed question + context to claude-3-haiku-20240307
+  2. Feed question + context to claude-haiku-4-5
   3. Score: correct_metric? correct_source? correct_filters?
   4. Write results to .canon-cache/{domain}/eval-results.json
+  5. Compare to baseline in .canon-cache/{domain}/eval-baseline.json
+  6. Exit non-zero if pass_rate < threshold or regression detected
 
 Usage:
   uv run python evals/run_evals.py --domain retail
-  uv run python evals/run_evals.py  (all domains)
+  uv run python evals/run_evals.py                   # all domains
+  uv run python evals/run_evals.py --update-baseline  # save current results as baseline
 """
 
 from __future__ import annotations
@@ -29,7 +32,6 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
-_MODEL = "claude-haiku-4-5"
 _SYSTEM_PROMPT = """You are a data analyst assistant that routes business questions to the correct data source.
 
 You will receive:
@@ -45,6 +47,17 @@ Respond ONLY with a JSON object (no prose, no markdown) in this exact format:
   "reasoning": "<one sentence>"
 }"""
 
+
+# ── Config ────────────────────────────────────────────────────────────────────
+
+def _load_eval_config() -> dict:
+    path = _REPO_ROOT / "eval-config.yaml"
+    if not path.exists():
+        return {}
+    return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+
+
+# ── Data models ───────────────────────────────────────────────────────────────
 
 @dataclass
 class EvalQuestion:
@@ -88,6 +101,19 @@ class EvalResult:
     def to_dict(self) -> dict:
         return asdict(self)
 
+
+@dataclass
+class RegressionReport:
+    domain: str
+    baseline_pass_rate: float
+    current_pass_rate: float
+    delta: float
+    regression: bool
+    regression_threshold: float
+    regressions: list[str] = field(default_factory=list)  # question IDs that regressed
+
+
+# ── Loading ───────────────────────────────────────────────────────────────────
 
 def _load_questions(domain: str) -> list[EvalQuestion]:
     path = _REPO_ROOT / "evals" / domain / "questions.yaml"
@@ -166,28 +192,28 @@ def _assemble_context(domain: str) -> str:
         sections.append("## GLOSSARY\n" + "\n".join(term_lines))
 
     if rules_md:
-        # Include only the most relevant sections
         sections.append("## DOMAIN RULES\n" + rules_md[:800])
 
     return "\n\n".join(sections)
 
 
-def _ask_llm(client: anthropic.Anthropic, context: str, question: str) -> tuple[str, str]:
-    """Ask the LLM and return (raw_response, parsed_json_str)."""
+# ── LLM call ─────────────────────────────────────────────────────────────────
+
+def _ask_llm(client: anthropic.Anthropic, context: str, question: str, model: str, max_tokens: int) -> str:
+    """Ask the LLM and return raw response text."""
     user_msg = f"## CANON DOMAIN CONTEXT\n{context}\n\n## QUESTION\n{question}"
     response = client.messages.create(
-        model=_MODEL,
-        max_tokens=512,
+        model=model,
+        max_tokens=max_tokens,
+        temperature=0.0,
         system=_SYSTEM_PROMPT,
         messages=[{"role": "user", "content": user_msg}],
     )
-    raw = response.content[0].text.strip()
-    return raw, raw
+    return response.content[0].text.strip()
 
 
 def _parse_response(raw: str) -> dict:
-    """Parse LLM JSON response, tolerating minor formatting."""
-    # Strip markdown code fences if present
+    """Parse LLM JSON response, tolerating markdown code fences."""
     raw = raw.strip()
     if raw.startswith("```"):
         raw = "\n".join(raw.split("\n")[1:])
@@ -196,12 +222,13 @@ def _parse_response(raw: str) -> dict:
     return json.loads(raw.strip())
 
 
+# ── Scoring ───────────────────────────────────────────────────────────────────
+
 def _score(q: EvalQuestion, actual: dict) -> EvalScore:
     actual_metric = actual.get("metric", "")
     actual_source = actual.get("source", "")
     reasoning = actual.get("reasoning", "")
 
-    # Refusal questions: pass if agent explicitly refuses (empty metric/source + reasoning mentions refusal)
     if q.refusal:
         refused = (not actual_metric and not actual_source) and bool(reasoning)
         return EvalScore(
@@ -234,10 +261,56 @@ def _score(q: EvalQuestion, actual: dict) -> EvalScore:
     )
 
 
-def run_evals(domain: str, api_key: str | None = None) -> EvalResult:
+# ── Baseline management ───────────────────────────────────────────────────────
+
+def _load_baseline(domain: str) -> dict | None:
+    path = _REPO_ROOT / ".canon-cache" / domain / "eval-baseline.json"
+    if not path.exists():
+        return None
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _save_baseline(domain: str, result: EvalResult) -> None:
+    cache_dir = _REPO_ROOT / ".canon-cache" / domain
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    path = cache_dir / "eval-baseline.json"
+    path.write_text(json.dumps(result.to_dict(), indent=2), encoding="utf-8")
+    logger.info("Baseline saved to %s", path)
+
+
+def _check_regression(result: EvalResult, baseline: dict, regression_threshold: float) -> RegressionReport:
+    baseline_rate = baseline.get("pass_rate", 0.0)
+    delta = result.pass_rate - baseline_rate
+    regression = delta < -regression_threshold
+
+    # Find questions that passed in baseline but fail now
+    baseline_passed = {s["question_id"] for s in baseline.get("scores", []) if s.get("overall")}
+    current_passed = {s.question_id for s in result.scores if s.overall}
+    regressions = sorted(baseline_passed - current_passed)
+
+    return RegressionReport(
+        domain=result.domain,
+        baseline_pass_rate=baseline_rate,
+        current_pass_rate=result.pass_rate,
+        delta=delta,
+        regression=regression,
+        regression_threshold=regression_threshold,
+        regressions=regressions,
+    )
+
+
+# ── Runner ────────────────────────────────────────────────────────────────────
+
+def run_evals(domain: str, api_key: str | None = None, config: dict | None = None) -> EvalResult:
+    if config is None:
+        config = _load_eval_config()
+
     api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key:
         raise ValueError("ANTHROPIC_API_KEY is required")
+
+    model = config.get("model", "claude-haiku-4-5")
+    max_tokens = config.get("max_tokens", 512)
 
     client = anthropic.Anthropic(api_key=api_key)
     questions = _load_questions(domain)
@@ -250,7 +323,7 @@ def run_evals(domain: str, api_key: str | None = None) -> EvalResult:
     for q in questions:
         logger.info("  [%s] %s", q.id, q.question[:60])
         try:
-            raw, _ = _ask_llm(client, context, q.question)
+            raw = _ask_llm(client, context, q.question, model, max_tokens)
             parsed = _parse_response(raw)
             score = _score(q, parsed)
         except Exception as e:
@@ -274,7 +347,7 @@ def run_evals(domain: str, api_key: str | None = None) -> EvalResult:
     passed = sum(1 for s in scores if s.overall)
     result = EvalResult(
         domain=domain,
-        model=_MODEL,
+        model=model,
         run_at=datetime.now(timezone.utc).isoformat(),
         total=len(scores),
         passed=passed,
@@ -283,7 +356,6 @@ def run_evals(domain: str, api_key: str | None = None) -> EvalResult:
         scores=scores,
     )
 
-    # Write to cache
     cache_dir = _REPO_ROOT / ".canon-cache" / domain
     cache_dir.mkdir(parents=True, exist_ok=True)
     out_path = cache_dir / "eval-results.json"
@@ -293,29 +365,69 @@ def run_evals(domain: str, api_key: str | None = None) -> EvalResult:
     return result
 
 
+# ── CLI ───────────────────────────────────────────────────────────────────────
+
 def _main() -> None:
     parser = argparse.ArgumentParser(description="Canon eval harness")
     parser.add_argument("--domain", default=None, help="Domain to evaluate (default: all)")
     parser.add_argument("--api-key", default=None, help="Anthropic API key")
+    parser.add_argument("--update-baseline", action="store_true",
+                        help="Save current results as the new baseline")
+    parser.add_argument("--check-regression", action="store_true",
+                        help="Exit non-zero if regression vs baseline is detected")
     args = parser.parse_args()
 
-    domains = []
+    config = _load_eval_config()
+    pass_threshold = config.get("pass_threshold", 0.80)
+    regression_threshold = config.get("regression_threshold", 0.05)
+    auto_update = config.get("auto_update_baseline", False)
+
     if args.domain:
         domains = [args.domain]
     else:
-        domains_dir = _REPO_ROOT / "domains"
-        domains = [d.name for d in sorted(domains_dir.iterdir()) if d.is_dir() and d.name != "_template"]
+        configured = config.get("domains", [])
+        if configured:
+            domains = configured
+        else:
+            domains_dir = _REPO_ROOT / "domains"
+            domains = [d.name for d in sorted(domains_dir.iterdir())
+                       if d.is_dir() and d.name != "_template"]
 
     any_failure = False
+
     for domain in domains:
         logger.info("Running evals for domain: %s", domain)
-        result = run_evals(domain, api_key=args.api_key)
-        logger.info(
-            "  %s/%s passed (%.0f%%)",
-            result.passed, result.total, result.pass_rate * 100
-        )
-        if result.pass_rate < 0.8:
-            logger.warning("  BELOW THRESHOLD (80%%)")
+        result = run_evals(domain, api_key=args.api_key, config=config)
+        logger.info("  %s/%s passed (%.0f%%)", result.passed, result.total, result.pass_rate * 100)
+
+        # Baseline handling
+        baseline = _load_baseline(domain)
+        if baseline:
+            report = _check_regression(result, baseline, regression_threshold)
+            if report.regression:
+                logger.warning(
+                    "  REGRESSION: pass rate dropped %.1f%% vs baseline "
+                    "(%.0f%% → %.0f%%). Regressed questions: %s",
+                    abs(report.delta) * 100,
+                    report.baseline_pass_rate * 100,
+                    report.current_pass_rate * 100,
+                    ", ".join(report.regressions) or "none",
+                )
+                if args.check_regression:
+                    any_failure = True
+            else:
+                delta_str = f"+{report.delta*100:.1f}%" if report.delta >= 0 else f"{report.delta*100:.1f}%"
+                logger.info("  vs baseline: %s (%.0f%% → %.0f%%)",
+                            delta_str, report.baseline_pass_rate * 100, result.pass_rate * 100)
+        else:
+            logger.info("  No baseline found — run with --update-baseline to establish one")
+
+        # Save baseline if requested or auto-update when passing
+        if args.update_baseline or (auto_update and result.pass_rate >= pass_threshold):
+            _save_baseline(domain, result)
+
+        if result.pass_rate < pass_threshold:
+            logger.warning("  BELOW THRESHOLD (%.0f%%)", pass_threshold * 100)
             any_failure = True
 
     import sys
@@ -324,4 +436,3 @@ def _main() -> None:
 
 if __name__ == "__main__":
     _main()
-

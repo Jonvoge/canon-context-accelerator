@@ -60,7 +60,7 @@ def test_domain_field_mismatch(tmp_path: Path, repo_root: Path) -> None:
 
     result = validate_domain("retail", tmp_path)
     rule_ids = [f.rule for f in result.findings if f.severity == "error"]
-    assert "domain-field-match" in rule_ids
+    assert "cross:domain-mismatch" in rule_ids
 
 
 def test_duplicate_metric_names(tmp_path: Path, repo_root: Path) -> None:
@@ -80,7 +80,7 @@ def test_duplicate_metric_names(tmp_path: Path, repo_root: Path) -> None:
 
     result = validate_domain("retail", tmp_path)
     rule_ids = [f.rule for f in result.findings if f.severity == "error"]
-    assert "unique-metric-names" in rule_ids
+    assert "cross:duplicate-metric-name" in rule_ids
 
 
 def test_unresolved_depends_on(tmp_path: Path, repo_root: Path) -> None:
@@ -99,4 +99,4 @@ def test_unresolved_depends_on(tmp_path: Path, repo_root: Path) -> None:
 
     result = validate_domain("retail", tmp_path)
     rule_ids = [f.rule for f in result.findings]
-    assert "depends-on-resolution" in rule_ids
+    assert "cross:unresolved-depends-on" in rule_ids

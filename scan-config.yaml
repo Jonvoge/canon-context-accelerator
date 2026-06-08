@@ -19,7 +19,7 @@ connectors:
     auth_secret_name: CANON_FABRIC_CLIENT_SECRET
     options:
       workspace_id: "b53e615a-ab79-49f9-bcf0-67250a34f633"
-      dataset_name: "Retail Planning"
+      dataset_name: "RetailSemanticModel"
 
   - id: retail-sql
     type: fabric_sql

@@ -2,6 +2,7 @@
 schema_version: "1.0"
 domain: retail
 questions:
+  # ── Revenue routing ───────────────────────────────────────────────────────
   - id: q1-revenue-total
     question: "What was total revenue last quarter?"
     expected_metric: Total Revenue
@@ -13,11 +14,8 @@ questions:
     question: "Show me revenue by product category for the last 6 months"
     expected_metric: Total Revenue
     expected_source: primary
-    expected_filters:
-      time: "last 6 months"
-      group_by: "Product Category"
     difficulty: medium
-    notes: "Semantic model supports category dimension; primary is correct unless joining to non-modelled fields."
+    notes: "Semantic model supports category dimension; primary is correct."
 
   - id: q3-revenue-forbidden-source
     question: "What does Finance Reporting say about revenue?"
@@ -25,21 +23,86 @@ questions:
     expected_source: primary
     difficulty: hard
     refusal: true
-    notes: "Agent should refuse to query Finance Reporting and explain why. Accept empty metric/source with refusal reasoning."
+    notes: "Agent must refuse Finance Reporting and explain the known discrepancy."
 
   - id: q4-status-filter
     question: "Revenue for completed orders only"
     expected_metric: Total Revenue
     expected_source: primary
-    expected_filters:
-      Order Status: "Completed"
     difficulty: easy
-    notes: "Revenue always filters to Completed. Agent should confirm this is already the default."
+    notes: "Revenue always filters to Completed. Agent should confirm this is the default."
 
-  - id: q5-comparable-stores
+  - id: q5-yoy-revenue
     question: "Year-over-year revenue growth"
-    expected_metric: Total Revenue
+    expected_metric: Revenue YoY %
     expected_source: primary
     expected_time_scope: "YoY"
     difficulty: medium
-    notes: "Should use comparable stores per domain rules."
+    notes: "Should route to the dedicated YoY measure, not Total Revenue."
+
+  # ── Margin and cost ───────────────────────────────────────────────────────
+  - id: q6-gross-margin
+    question: "What is our gross margin percentage this year?"
+    expected_metric: Gross Margin %
+    expected_source: primary
+    difficulty: easy
+
+  - id: q7-gross-profit
+    question: "How much gross profit did we make last month?"
+    expected_metric: Gross Profit
+    expected_source: primary
+    difficulty: easy
+
+  - id: q8-cogs
+    question: "Show me total cost of goods sold by product category"
+    expected_metric: Total COGS
+    expected_source: primary
+    difficulty: medium
+
+  # ── Volume and averages ───────────────────────────────────────────────────
+  - id: q9-order-count
+    question: "How many orders did we receive last week?"
+    expected_metric: Total Orders
+    expected_source: primary
+    difficulty: easy
+
+  - id: q10-aov
+    question: "What is the average order value by customer segment?"
+    expected_metric: Avg Order Value
+    expected_source: primary
+    difficulty: medium
+
+  - id: q11-customer-count
+    question: "How many unique customers bought from us this quarter?"
+    expected_metric: Customer Count
+    expected_source: primary
+    difficulty: easy
+
+  - id: q12-discount-rate
+    question: "What percentage of revenue are we giving away as discounts?"
+    expected_metric: Discount %
+    expected_source: primary
+    difficulty: medium
+    notes: "Should route to Discount % not Total Discount."
+
+  # ── Time intelligence ─────────────────────────────────────────────────────
+  - id: q13-revenue-ytd
+    question: "What is our revenue year to date?"
+    expected_metric: Revenue YTD
+    expected_source: primary
+    difficulty: easy
+
+  - id: q14-revenue-py
+    question: "What was last year's revenue for the same period?"
+    expected_metric: Revenue PY
+    expected_source: primary
+    difficulty: medium
+    notes: "Should use Revenue PY not Total Revenue with manual date filter."
+
+  # ── Refusal / boundary ────────────────────────────────────────────────────
+  - id: q15-gross-revenue-vs-net
+    question: "What is our gross revenue before discounts?"
+    expected_metric: Total Gross Revenue
+    expected_source: primary
+    difficulty: medium
+    notes: "Should route to Total Gross Revenue, not Total Revenue (which is net of discounts)."

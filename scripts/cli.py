@@ -105,6 +105,17 @@ def serve(transport: str, port: int, repo_root: str | None):
         asyncio.run(run_http_server(root, port=port))
 
 
+@main.command("interview")
+@click.option("--domain", required=True, help="Domain slug to interview")
+@click.option("--repo-root", default=None, type=click.Path())
+def interview(domain: str, repo_root: str | None):
+    """Run a terminal interview to draft definitions for undocumented measures."""
+    from scripts.interview import start_interview
+
+    root = Path(repo_root) if repo_root else _REPO_ROOT
+    start_interview(domain=domain, repo_root=root)
+
+
 @main.command("init")
 @click.option("--domain", required=True, help="New domain slug")
 @click.option("--repo-root", default=None, type=click.Path())
@@ -120,6 +131,72 @@ def init_domain(domain: str, repo_root: str | None):
     click.echo(f"  2. Edit domains/{domain}/ontology.yaml")
     click.echo(f"  3. Upload docs to bootstrap-docs/{domain}/")
     click.echo(f"  4. Run: canon validate --domain {domain}")
+
+
+@main.command("bootstrap")
+@click.option("--domain", required=True, help="Domain slug to bootstrap")
+@click.option("--config", default="scan-config.yaml", help="Path to scan config")
+@click.option("--repo-root", default=None, type=click.Path())
+@click.option("--no-pr", is_flag=True, default=False, help="Skip branch and PR creation")
+@click.option("--dry-run", is_flag=True, default=False, help="Parse and draft but do not commit")
+def bootstrap(domain: str, config: str, repo_root: str | None, no_pr: bool, dry_run: bool):
+    """Bootstrap domain definitions from platform scan + uploaded documentation."""
+    from canon.bootstrap.orchestrator import run_bootstrap
+
+    root = Path(repo_root) if repo_root else _REPO_ROOT
+    config_path = root / config
+
+    click.echo(f"Bootstrapping domain: {domain}")
+    if dry_run:
+        click.echo("  (dry run — no branch or PR will be created)")
+
+    report = run_bootstrap(
+        domain=domain,
+        config_path=config_path,
+        repo_root=root,
+        create_pr=not no_pr,
+        dry_run=dry_run,
+    )
+
+    if report.error:
+        click.echo(click.style(f"BOOTSTRAP ERROR: {report.error}", fg="red"))
+        sys.exit(1)
+
+    high = sum(1 for d in report.drafts if d.confidence == "high")
+    medium = sum(1 for d in report.drafts if d.confidence == "medium")
+    low = sum(1 for d in report.drafts if d.confidence == "low")
+
+    click.echo(click.style(f"✓ Bootstrapped {len(report.drafts)} measures:", fg="green"))
+    click.echo(f"  High confidence (doc+platform): {high}")
+    click.echo(f"  Medium confidence (platform only): {medium}")
+    click.echo(f"  Low confidence (needs review): {low}")
+
+    needs_review = [d.measure_name for d in report.drafts if d.needs_interview]
+    if needs_review:
+        click.echo(click.style(f"\n⚠ {len(needs_review)} measures need interview before merge:", fg="yellow"))
+        for name in needs_review:
+            click.echo(f"  - {name}")
+
+    if report.pr_url:
+        click.echo(f"\nPR: {report.pr_url}")
+
+
+@main.command("review-consistency")
+@click.option("--domain", required=True, help="Domain slug to check")
+@click.option("--repo-root", default=None, type=click.Path())
+def review_consistency_cmd(domain: str, repo_root: str | None):
+    """Run cross-file consistency checks for a domain."""
+    from scripts.review_consistency import review_consistency
+
+    root = Path(repo_root) if repo_root else _REPO_ROOT
+    findings = review_consistency(domain, repo_root=root)
+
+    if not findings:
+        click.echo(click.style(f"✓ {domain}: no consistency issues", fg="green"))
+    else:
+        for f in findings:
+            click.echo(click.style(f"  ✗ {f}", fg="yellow"))
+        sys.exit(1)
 
 
 if __name__ == "__main__":

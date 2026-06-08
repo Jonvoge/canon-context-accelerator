@@ -1,0 +1,19 @@
+# Canon eval harness configuration
+model: claude-haiku-4-5
+temperature: 0.0
+max_tokens: 512
+
+# Threshold below which a run is flagged as failing
+pass_threshold: 0.80
+
+# Regression: how much the pass_rate may drop vs. baseline before blocking a PR
+regression_threshold: 0.05
+
+# Cost guard: abort eval run if cumulative estimated cost exceeds this (USD)
+cost_budget_usd: 2.00
+
+# Whether to update the baseline automatically when a run passes above threshold
+auto_update_baseline: false
+
+# Domains to include in scheduled runs (empty = all)
+domains: []

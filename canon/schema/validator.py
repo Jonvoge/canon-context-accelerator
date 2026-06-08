@@ -72,11 +72,19 @@ def _validate_against_schema(instance: dict, schema_name: str, filepath: str) ->
     return findings
 
 
-def validate_domain(domain_path: Path, repo_root: Path | None = None) -> ValidationResult:
+def validate_domain(domain_path: Path | str, repo_root: Path | None = None) -> ValidationResult:
     """
     Run layer 1 (JSON Schema) and layer 2 (cross-file consistency) checks
     on a single domain folder.
+
+    Accepts either:
+    - validate_domain(Path("domains/retail"))
+    - validate_domain("retail", repo_root)  — slug + root
     """
+    if isinstance(domain_path, str):
+        if repo_root is None:
+            raise ValueError("repo_root is required when domain_path is a string slug")
+        domain_path = repo_root / "domains" / domain_path
     domain_slug = domain_path.name
     result = ValidationResult(domain=domain_slug)
 
