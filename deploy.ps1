@@ -14,13 +14,13 @@
 
 [CmdletBinding()]
 param(
-    [string]$ResourceGroup  = $env:AZURE_RESOURCE_GROUP ?? "rg-canon",
-    [string]$Location       = $env:AZURE_LOCATION       ?? "northeurope",
-    [string]$AcrName        = $env:AZURE_ACR_NAME       ?? "jvcanonacr",
-    [string]$AcaEnv         = $env:CANON_ACA_ENV        ?? "canon-env",
-    [string]$McpApp         = $env:CANON_MCP_APP        ?? "canon-mcp",
-    [string]$BotApp         = $env:CANON_BOT_APP        ?? "canon-bot",
-    [string]$SubscriptionId = $env:AZURE_SUBSCRIPTION_ID,
+    [string]$ResourceGroup  = "",
+    [string]$Location       = "",
+    [string]$AcrName        = "",
+    [string]$AcaEnv         = "",
+    [string]$McpApp         = "",
+    [string]$BotApp         = "",
+    [string]$SubscriptionId = "",
     [switch]$SkipBuild,
     [switch]$McpOnly,
     [switch]$BotOnly
@@ -47,6 +47,15 @@ if (Test-Path $envFile) {
     Write-Host "Loaded .env"
 }
 
+# Apply parameter defaults after .env is loaded (PS5.1 has no ?? in param blocks)
+if (-not $ResourceGroup)  { $ResourceGroup  = if ($env:AZURE_RESOURCE_GROUP) { $env:AZURE_RESOURCE_GROUP } else { "rg-canon" } }
+if (-not $Location)       { $Location       = if ($env:AZURE_LOCATION)       { $env:AZURE_LOCATION }       else { "northeurope" } }
+if (-not $AcrName)        { $AcrName        = if ($env:AZURE_ACR_NAME)        { $env:AZURE_ACR_NAME }        else { "jvcanonacr" } }
+if (-not $AcaEnv)         { $AcaEnv         = if ($env:CANON_ACA_ENV)         { $env:CANON_ACA_ENV }         else { "canon-env" } }
+if (-not $McpApp)         { $McpApp         = if ($env:CANON_MCP_APP)         { $env:CANON_MCP_APP }         else { "canon-mcp" } }
+if (-not $BotApp)         { $BotApp         = if ($env:CANON_BOT_APP)         { $env:CANON_BOT_APP }         else { "canon-bot" } }
+if (-not $SubscriptionId) { $SubscriptionId = $env:AZURE_SUBSCRIPTION_ID }
+
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 function Write-Step([string]$msg) {
     Write-Host "`n==> $msg" -ForegroundColor Cyan
@@ -63,9 +72,9 @@ $tenantId        = Require-EnvVar "CANON_FABRIC_TENANT_ID"
 $clientId        = Require-EnvVar "CANON_FABRIC_CLIENT_ID"
 $clientSecret    = Require-EnvVar "CANON_FABRIC_CLIENT_SECRET"
 $workspaceId     = Require-EnvVar "CANON_FABRIC_WORKSPACE_ID"
-$datasetName     = $env:CANON_FABRIC_DATASET_NAME ?? ""
-$sqlServer       = $env:CANON_SQL_SERVER          ?? ""
-$sqlDatabase     = $env:CANON_SQL_DATABASE        ?? ""
+$datasetName     = if ($env:CANON_FABRIC_DATASET_NAME) { $env:CANON_FABRIC_DATASET_NAME } else { "" }
+$sqlServer       = if ($env:CANON_SQL_SERVER)           { $env:CANON_SQL_SERVER }           else { "" }
+$sqlDatabase     = if ($env:CANON_SQL_DATABASE)         { $env:CANON_SQL_DATABASE }         else { "" }
 $anthropicKey    = Require-EnvVar "ANTHROPIC_API_KEY"
 $msAppId         = Require-EnvVar "MICROSOFT_APP_ID"
 $msAppPassword   = Require-EnvVar "MICROSOFT_APP_PASSWORD"
@@ -104,7 +113,8 @@ if (-not $acaEnvExists) {
 
 # ─── Build images ─────────────────────────────────────────────────────────────
 $repoRoot = $PSScriptRoot
-$gitHash  = (git -C $repoRoot rev-parse --short HEAD 2>$null) ?? "latest"
+$gitHashRaw = git -C $repoRoot rev-parse --short HEAD 2>$null
+$gitHash    = if ($gitHashRaw) { $gitHashRaw } else { "latest" }
 $mcpImage = "${acrLoginServer}/${McpApp}:${gitHash}"
 $botImage = "${acrLoginServer}/${BotApp}:${gitHash}"
 
