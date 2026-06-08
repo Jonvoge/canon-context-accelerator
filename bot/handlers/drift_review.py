@@ -24,6 +24,14 @@ logger = logging.getLogger(__name__)
 _active_sessions: dict[str, list[dict]] = {}
 
 
+class DriftReviewHandler:
+    async def is_active(self, conversation_id: str) -> bool:
+        return conversation_id in _active_sessions and bool(_active_sessions[conversation_id])
+
+    async def handle(self, turn_context: TurnContext) -> None:
+        await handle(turn_context)
+
+
 async def is_active(conversation_id: str) -> bool:
     return conversation_id in _active_sessions and bool(_active_sessions[conversation_id])
 

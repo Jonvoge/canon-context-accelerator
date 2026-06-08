@@ -28,6 +28,11 @@ _MODEL = "claude-3-haiku-20240307"
 _ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 
 
+class AdHocUpdateHandler:
+    async def handle(self, turn_context: TurnContext, text: str) -> None:
+        await handle(turn_context, text)
+
+
 def _find_metric_in_yaml(text: str, metric_name: str) -> dict | None:
     data = yaml.safe_load(text)
     for m in data.get("metrics", []):
