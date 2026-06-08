@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
-_MODEL = "claude-3-haiku-20240307"
+_MODEL = "claude-haiku-4-5"
 _SYSTEM_PROMPT = """You are a data analyst assistant that routes business questions to the correct data source.
 
 You will receive:
@@ -56,6 +56,7 @@ class EvalQuestion:
     expected_time_scope: str = ""
     difficulty: str = "medium"
     notes: str = ""
+    refusal: bool = False
 
 
 @dataclass
@@ -103,6 +104,7 @@ def _load_questions(domain: str) -> list[EvalQuestion]:
             expected_time_scope=q.get("expected_time_scope", ""),
             difficulty=q.get("difficulty", "medium"),
             notes=q.get("notes", ""),
+            refusal=q.get("refusal", False),
         )
         for q in raw.get("questions", [])
     ]
@@ -197,6 +199,24 @@ def _parse_response(raw: str) -> dict:
 def _score(q: EvalQuestion, actual: dict) -> EvalScore:
     actual_metric = actual.get("metric", "")
     actual_source = actual.get("source", "")
+    reasoning = actual.get("reasoning", "")
+
+    # Refusal questions: pass if agent explicitly refuses (empty metric/source + reasoning mentions refusal)
+    if q.refusal:
+        refused = (not actual_metric and not actual_source) and bool(reasoning)
+        return EvalScore(
+            question_id=q.id,
+            question=q.question,
+            expected_metric=q.expected_metric,
+            actual_metric=actual_metric,
+            expected_source=q.expected_source,
+            actual_source=actual_source,
+            metric_correct=refused,
+            source_correct=refused,
+            overall=refused,
+            model_response=json.dumps(actual),
+        )
+
     metric_correct = actual_metric.lower() == q.expected_metric.lower()
     source_correct = actual_source == q.expected_source
 

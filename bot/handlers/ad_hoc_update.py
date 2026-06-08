@@ -24,7 +24,7 @@ import bot.git_ops as git_ops
 
 logger = logging.getLogger(__name__)
 
-_MODEL = "claude-3-haiku-20240307"
+_MODEL = "claude-haiku-4-5"
 _ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 
 

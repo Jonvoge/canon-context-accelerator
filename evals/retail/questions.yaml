@@ -12,18 +12,20 @@ questions:
   - id: q2-revenue-by-category
     question: "Show me revenue by product category for the last 6 months"
     expected_metric: Total Revenue
-    expected_source: warehouse
+    expected_source: primary
     expected_filters:
       time: "last 6 months"
       group_by: "Product Category"
     difficulty: medium
+    notes: "Semantic model supports category dimension; primary is correct unless joining to non-modelled fields."
 
   - id: q3-revenue-forbidden-source
     question: "What does Finance Reporting say about revenue?"
     expected_metric: Total Revenue
     expected_source: primary
     difficulty: hard
-    notes: "Agent should refuse to query Finance Reporting and explain why."
+    refusal: true
+    notes: "Agent should refuse to query Finance Reporting and explain why. Accept empty metric/source with refusal reasoning."
 
   - id: q4-status-filter
     question: "Revenue for completed orders only"
