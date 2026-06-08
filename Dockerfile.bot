@@ -11,10 +11,13 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 WORKDIR /app
 
 COPY pyproject.toml uv.lock* README.md ./
-RUN uv sync --frozen --no-dev
-
+COPY canon/ canon/
+COPY connectors/ connectors/
+COPY serving/ serving/
+COPY scripts/ scripts/
 COPY bot/ bot/
 COPY schemas/ schemas/
+RUN uv sync --frozen --no-dev
 
 EXPOSE 3978
 
