@@ -35,19 +35,30 @@ async def _get_jwks(tenant_id: str) -> dict:
     return _JWKS_CACHE[tenant_id]
 
 
+def _find_key(jwks: dict, kid: str | None) -> object | None:
+    for k in jwks.get("keys", []):
+        if k.get("kid") == kid:
+            return jwt.algorithms.RSAAlgorithm.from_jwk(k)
+    return None
+
+
 async def validate_token(token: str, config: AuthConfig) -> dict | None:
     """Validate a Bearer token from Entra ID. Returns claims dict or None."""
     try:
-        jwks = await _get_jwks(config.tenant_id)
         header = jwt.get_unverified_header(token)
         kid = header.get("kid")
-        key = None
-        for k in jwks.get("keys", []):
-            if k.get("kid") == kid:
-                key = jwt.algorithms.RSAAlgorithm.from_jwk(k)
-                break
+
+        jwks = await _get_jwks(config.tenant_id)
+        key = _find_key(jwks, kid)
+
         if key is None:
-            logger.warning("No matching key for kid=%s", kid)
+            # kid not in cache — may be a new key after rotation; fetch fresh once
+            _JWKS_CACHE.pop(config.tenant_id, None)
+            jwks = await _get_jwks(config.tenant_id)
+            key = _find_key(jwks, kid)
+
+        if key is None:
+            logger.warning("No matching key for kid=%s after cache refresh", kid)
             return None
 
         claims = jwt.decode(
@@ -58,7 +69,7 @@ async def validate_token(token: str, config: AuthConfig) -> dict | None:
             issuer=f"https://login.microsoftonline.com/{config.tenant_id}/v2.0",
         )
         return claims
-    except jwt.PyJWTError as e:
+    except (jwt.PyJWTError, httpx.HTTPError, Exception) as e:
         logger.warning("Token validation failed: %s", e)
         return None
 
@@ -82,6 +93,8 @@ def create_auth_middleware(config: AuthConfig) -> Callable:
     def decorator(handler: Callable) -> Callable:
         async def wrapped(request: Request) -> Response:
             if not config.required:
+                request.state.user_claims = None
+                request.state.user_token = None
                 return await handler(request)
 
             auth_header = request.headers.get("authorization", "")

@@ -1,12 +1,13 @@
 from unittest.mock import patch, AsyncMock
 
+import httpx
 import pytest
 from starlette.testclient import TestClient
 from starlette.applications import Starlette
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
-from serving.auth import AuthConfig, create_auth_middleware, resource_metadata_route
+from serving.auth import AuthConfig, create_auth_middleware, resource_metadata_route, validate_token
 
 
 @pytest.fixture
@@ -43,3 +44,41 @@ def test_unauthenticated_request_returns_401(auth_config):
     resp = client.post("/mcp", json={})
     assert resp.status_code == 401
     assert "resource_metadata" in resp.headers["www-authenticate"]
+
+
+def test_required_false_bypasses_auth():
+    """When required=False, request passes through without auth."""
+    config = AuthConfig(
+        tenant_id="test-tenant",
+        client_id="test-client",
+        base_url="https://example.com",
+        required=False,
+    )
+
+    async def dummy(request):
+        assert request.state.user_token is None
+        assert request.state.user_claims is None
+        return JSONResponse({"ok": True})
+
+    app = Starlette(routes=[
+        Route("/mcp", create_auth_middleware(config)(dummy), methods=["POST"]),
+    ])
+    client = TestClient(app)
+    resp = client.post("/mcp", json={})
+    assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_validate_token_returns_none_on_network_error():
+    """JWKS fetch failure returns None, not exception."""
+    config = AuthConfig(
+        tenant_id="test-tenant",
+        client_id="test-client",
+        base_url="https://example.com",
+    )
+    from serving.auth import _JWKS_CACHE
+    _JWKS_CACHE.clear()
+
+    with patch("serving.auth._get_jwks", side_effect=httpx.ConnectError("network down")):
+        result = await validate_token("fake.token.here", config)
+        assert result is None
