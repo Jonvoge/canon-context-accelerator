@@ -138,6 +138,24 @@ def init_domain(domain: str, repo_root: str | None):
     click.echo(f"  4. Run: canon validate --domain {domain}")
 
 
+@main.command("serve-fabric-proxy")
+@click.option("--transport", default="streamable-http", show_default=True,
+              type=click.Choice(["stdio", "streamable-http"]))
+@click.option("--port", default=8001, show_default=True, envvar="CANON_FABRIC_PROXY_PORT")
+@click.option("--repo-root", default=None, type=click.Path(), envvar="CANON_REPO_ROOT")
+def serve_fabric_proxy(transport: str, port: int, repo_root: str | None):
+    """Start the Fabric Proxy MCP server."""
+    import asyncio
+    from serving.fabric_proxy.server import run_http_server, run_stdio_server
+
+    root = Path(repo_root) if repo_root else _REPO_ROOT
+
+    if transport == "stdio":
+        asyncio.run(run_stdio_server(root))
+    else:
+        asyncio.run(run_http_server(root, port=port))
+
+
 @main.command("bootstrap")
 @click.option("--domain", required=True, help="Domain slug to bootstrap")
 @click.option("--config", default="scan-config.yaml", help="Path to scan config")
@@ -184,24 +202,6 @@ def bootstrap(domain: str, config: str, repo_root: str | None, no_pr: bool, dry_
 
     if report.pr_url:
         click.echo(f"\nPR: {report.pr_url}")
-
-
-@main.command("review-consistency")
-@click.option("--domain", required=True, help="Domain slug to check")
-@click.option("--repo-root", default=None, type=click.Path())
-def review_consistency_cmd(domain: str, repo_root: str | None):
-    """Run cross-file consistency checks for a domain."""
-    from scripts.review_consistency import review_consistency
-
-    root = Path(repo_root) if repo_root else _REPO_ROOT
-    findings = review_consistency(domain, repo_root=root)
-
-    if not findings:
-        click.echo(click.style(f"✓ {domain}: no consistency issues", fg="green"))
-    else:
-        for f in findings:
-            click.echo(click.style(f"  ✗ {f}", fg="yellow"))
-        sys.exit(1)
 
 
 if __name__ == "__main__":
