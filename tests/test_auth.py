@@ -28,7 +28,7 @@ def test_resource_metadata_endpoint(auth_config):
     assert resp.status_code == 200
     body = resp.json()
     assert "authorization_servers" in body
-    assert "https://login.microsoftonline.com/a7ed0222-1883-488c-8bbb-6ee4f043da6d/v2.0" in body["authorization_servers"]
+    assert "https://canon-mcp.example.com" in body["authorization_servers"]
     assert body["resource"] == "https://canon-mcp.example.com"
 
 

@@ -87,11 +87,35 @@ def resource_metadata_route(config: AuthConfig) -> Callable:
     async def endpoint(request: Request) -> JSONResponse:
         return JSONResponse({
             "resource": config.base_url,
-            "authorization_servers": [
-                f"https://login.microsoftonline.com/{config.tenant_id}/v2.0"
-            ],
+            "authorization_servers": [config.base_url],
             "scopes_supported": [f"api://{config.client_id}/access"],
             "bearer_methods_supported": ["header"],
+        })
+    return endpoint
+
+
+def authorization_server_metadata_route(config: AuthConfig) -> Callable:
+    """Returns a Starlette endpoint that serves RFC 8414 Authorization Server Metadata.
+
+    Points clients to Entra's authorize/token endpoints directly.
+    This is needed because Entra doesn't serve RFC 8414 metadata itself,
+    so we act as the metadata provider while Entra remains the actual auth server.
+    """
+    async def endpoint(request: Request) -> JSONResponse:
+        entra = f"https://login.microsoftonline.com/{config.tenant_id}/oauth2/v2.0"
+        return JSONResponse({
+            "issuer": f"https://login.microsoftonline.com/{config.tenant_id}/v2.0",
+            "authorization_endpoint": f"{entra}/authorize",
+            "token_endpoint": f"{entra}/token",
+            "registration_endpoint": None,
+            "scopes_supported": [
+                f"api://{config.client_id}/access",
+                "openid",
+                "offline_access",
+            ],
+            "response_types_supported": ["code"],
+            "grant_types_supported": ["authorization_code", "refresh_token"],
+            "code_challenge_methods_supported": ["S256"],
         })
     return endpoint
 
