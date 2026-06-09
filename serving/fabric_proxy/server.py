@@ -231,7 +231,7 @@ async def run_http_server(repo_root: Path | None = None, port: int = 8001) -> No
         Route("/authorize", authorization_proxy_route(auth_config), methods=["GET"]),
         Route("/token", token_proxy_route(auth_config), methods=["POST"]),
         Route("/oauth/token", token_proxy_route(auth_config), methods=["POST"]),
-        Mount("/mcp", app=mcp_asgi, redirect_slashes=False),
+        Mount("/", app=mcp_asgi),
     ]
 
     starlette_app = Starlette(routes=routes)

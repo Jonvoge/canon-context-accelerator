@@ -329,7 +329,7 @@ async def run_http_server(repo_root: Path, port: int = 8000) -> None:
     else:
         mcp_handler = handle_mcp
 
-    routes.append(Mount("/mcp", app=mcp_handler, redirect_slashes=False))
+    routes.append(Mount("/", app=mcp_handler))
 
     starlette_app = Starlette(routes=routes)
 
