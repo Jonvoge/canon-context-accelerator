@@ -126,3 +126,62 @@ def create_auth_middleware(config: AuthConfig) -> Callable:
             return await handler(request)
         return wrapped
     return decorator
+
+
+def create_asgi_auth_middleware(config: AuthConfig):
+    """Wraps an ASGI app with JWT auth. For wrapping raw ASGI callables like the MCP session manager."""
+    def middleware(asgi_app):
+        async def wrapped_asgi(scope, receive, send):
+            if scope["type"] not in ("http", "websocket"):
+                await asgi_app(scope, receive, send)
+                return
+
+            if not config.required:
+                scope["state"] = scope.get("state", {})
+                scope["state"]["user_claims"] = None
+                scope["state"]["user_token"] = None
+                await asgi_app(scope, receive, send)
+                return
+
+            # Extract Authorization header from scope
+            headers = dict(scope.get("headers", []))
+            auth_header = headers.get(b"authorization", b"").decode("utf-8")
+
+            if not auth_header.startswith("Bearer "):
+                await _send_401(scope, send, config, error=None)
+                return
+
+            token = auth_header[7:]
+            claims = await validate_token(token, config)
+            if claims is None:
+                await _send_401(scope, send, config, error="invalid_token")
+                return
+
+            # Store in scope state for downstream handlers
+            scope.setdefault("state", {})
+            scope["state"]["user_claims"] = claims
+            scope["state"]["user_token"] = token
+            await asgi_app(scope, receive, send)
+
+        return wrapped_asgi
+    return middleware
+
+
+async def _send_401(scope, send, config: AuthConfig, error: str | None):
+    """Send a 401 Unauthorized ASGI response."""
+    www_auth = f'Bearer resource_metadata="{config.base_url}/.well-known/oauth-protected-resource"'
+    if error:
+        www_auth += f', error="{error}"'
+    await send({
+        "type": "http.response.start",
+        "status": 401,
+        "headers": [
+            (b"www-authenticate", www_auth.encode()),
+            (b"content-type", b"application/json"),
+        ],
+    })
+    await send({
+        "type": "http.response.body",
+        "body": b'{"error": "unauthorized"}',
+        "more_body": False,
+    })
