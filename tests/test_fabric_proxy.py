@@ -33,8 +33,23 @@ def test_resolve_connector_errors_on_unknown_model():
         ],
         "domains": [{"name": "retail", "semantic_connector": "retail-semantic"}],
     }
-    with pytest.raises(ValueError, match="not found"):
+    with pytest.raises(ValueError, match="not the semantic connector"):
         _resolve_connector(scan_config, domain="retail", model="nonexistent")
+
+
+def test_resolve_connector_rejects_wrong_domain_connector():
+    scan_config = {
+        "connectors": [
+            {"id": "retail-semantic", "type": "fabric_semantic", "options": {"workspace_id": "ws1", "dataset_id": "ds1"}},
+            {"id": "finance-semantic", "type": "fabric_semantic", "options": {"workspace_id": "ws2", "dataset_id": "ds2"}},
+        ],
+        "domains": [
+            {"name": "retail", "semantic_connector": "retail-semantic"},
+            {"name": "finance", "semantic_connector": "finance-semantic"},
+        ],
+    }
+    with pytest.raises(ValueError, match="not the semantic connector"):
+        _resolve_connector(scan_config, domain="retail", model="finance-semantic")
 
 
 async def test_execute_query_calls_fabric_api():

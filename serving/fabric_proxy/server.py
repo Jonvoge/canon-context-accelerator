@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -27,8 +28,16 @@ def _load_scan_config(repo_root: Path | None = None) -> dict:
 
 def _resolve_connector(scan_config: dict, domain: str, model: str) -> dict[str, str]:
     domains = scan_config.get("domains", [])
-    if not any(d.get("name") == domain for d in domains):
+    domain_cfg = next((d for d in domains if d.get("name") == domain), None)
+    if domain_cfg is None:
         raise ValueError(f"Domain '{domain}' not found")
+
+    domain_connector = domain_cfg.get("semantic_connector")
+    if model != domain_connector:
+        raise ValueError(
+            f"Connector '{model}' is not the semantic connector for domain '{domain}'. "
+            f"Expected '{domain_connector}'."
+        )
 
     connectors = scan_config.get("connectors", [])
     connector = next((c for c in connectors if c.get("id") == model), None)
@@ -58,7 +67,8 @@ async def _acquire_obo_token(user_token: str) -> str:
         authority=f"https://login.microsoftonline.com/{tenant_id}",
         client_credential=client_secret,
     )
-    result = obo_app.acquire_token_on_behalf_of(
+    result = await asyncio.to_thread(
+        obo_app.acquire_token_on_behalf_of,
         user_assertion=user_token,
         scopes=[_POWER_BI_SCOPE],
     )
