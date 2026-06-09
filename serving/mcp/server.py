@@ -168,6 +168,7 @@ def _create_auth_config() -> "AuthConfig | None":
         tenant_id=tenant_id,
         client_id=os.environ.get("CANON_AUTH_CLIENT_ID", ""),
         base_url=os.environ.get("CANON_MCP_BASE_URL", ""),
+        client_secret=os.environ.get("CANON_AUTH_CLIENT_SECRET", ""),
         required=True,
     )
 
