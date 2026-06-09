@@ -195,8 +195,8 @@ async def _list_domains_remote(repo_client) -> list[dict]:
     for d in scan_config.get("domains", []):
         result.append({
             "name": d["name"],
-            "metric_count": 0,
-            "dimension_count": 0,
+            "metric_count": None,
+            "dimension_count": None,
             "trigger_aliases": [],
         })
     return result
@@ -204,7 +204,7 @@ async def _list_domains_remote(repo_client) -> list[dict]:
 
 # ── MCP server factory ────────────────────────────────────────────────────────
 
-def create_app(repo_root: Path, repo_client=None, auth_config=None) -> Server:
+def create_app(repo_root: Path, repo_client=None) -> Server:
     app = Server("canon-mcp")
     cache = _DomainCache()
 
@@ -283,7 +283,7 @@ async def run_http_server(repo_root: Path, port: int = 8000) -> None:
     repo_client = _create_repo_client()
     auth_config = _create_auth_config()
 
-    app = create_app(repo_root, repo_client=repo_client, auth_config=auth_config)
+    app = create_app(repo_root, repo_client=repo_client)
     session_manager = StreamableHTTPSessionManager(app, json_response=True, stateless=True)
 
     async def handle_mcp(scope, receive, send):

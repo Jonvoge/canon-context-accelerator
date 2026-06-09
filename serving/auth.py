@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextvars
 import logging
 from dataclasses import dataclass, field
 from typing import Callable
@@ -22,6 +23,13 @@ class AuthConfig:
 
 
 _JWKS_CACHE: dict[str, dict] = {}
+
+_user_token_var: contextvars.ContextVar[str | None] = contextvars.ContextVar("user_token", default=None)
+_user_claims_var: contextvars.ContextVar[dict | None] = contextvars.ContextVar("user_claims", default=None)
+
+
+def get_user_token() -> str | None:
+    return _user_token_var.get()
 
 
 async def _get_jwks(tenant_id: str) -> dict:
@@ -140,7 +148,13 @@ def create_asgi_auth_middleware(config: AuthConfig):
                 scope["state"] = scope.get("state", {})
                 scope["state"]["user_claims"] = None
                 scope["state"]["user_token"] = None
-                await asgi_app(scope, receive, send)
+                t1 = _user_token_var.set(None)
+                t2 = _user_claims_var.set(None)
+                try:
+                    await asgi_app(scope, receive, send)
+                finally:
+                    _user_token_var.reset(t1)
+                    _user_claims_var.reset(t2)
                 return
 
             # Extract Authorization header from scope
@@ -161,7 +175,13 @@ def create_asgi_auth_middleware(config: AuthConfig):
             scope.setdefault("state", {})
             scope["state"]["user_claims"] = claims
             scope["state"]["user_token"] = token
-            await asgi_app(scope, receive, send)
+            token_token = _user_token_var.set(token)
+            claims_token = _user_claims_var.set(claims)
+            try:
+                await asgi_app(scope, receive, send)
+            finally:
+                _user_token_var.reset(token_token)
+                _user_claims_var.reset(claims_token)
 
         return wrapped_asgi
     return middleware
