@@ -130,9 +130,81 @@ class _DomainCache:
         return ctx
 
 
+# ── Factory helpers ──────────────────────────────────────────────────────────
+
+def _create_repo_client() -> "RepoClient | None":
+    from serving.repo_client import RepoClient, RepoConfig
+    provider = os.environ.get("CANON_REPO_PROVIDER")
+    if not provider:
+        return None
+    config = RepoConfig(
+        provider=provider,
+        owner=os.environ.get("CANON_REPO_OWNER", ""),
+        repo=os.environ.get("CANON_REPO_NAME", ""),
+        token=os.environ.get("CANON_REPO_TOKEN", ""),
+        branch=os.environ.get("CANON_REPO_BRANCH", "main"),
+        org=os.environ.get("CANON_REPO_ADO_ORG", ""),
+        project=os.environ.get("CANON_REPO_ADO_PROJECT", ""),
+    )
+    return RepoClient(config)
+
+
+def _create_auth_config() -> "AuthConfig | None":
+    from serving.auth import AuthConfig
+    tenant_id = os.environ.get("CANON_AUTH_TENANT_ID")
+    if not tenant_id:
+        return None
+    return AuthConfig(
+        tenant_id=tenant_id,
+        client_id=os.environ.get("CANON_AUTH_CLIENT_ID", ""),
+        base_url=os.environ.get("CANON_MCP_BASE_URL", ""),
+        required=True,
+    )
+
+
+# ── Remote async loaders ──────────────────────────────────────────────────────
+
+async def _assemble_domain_remote(domain: str, repo_client) -> dict:
+    prefix = f"domains/{domain}"
+
+    async def fetch_yaml(name: str) -> dict | None:
+        content = await repo_client.fetch_file_or_none(f"{prefix}/{name}")
+        if content is None:
+            return None
+        return yaml.safe_load(content) or {}
+
+    async def fetch_md(name: str) -> str | None:
+        return await repo_client.fetch_file_or_none(f"{prefix}/{name}")
+
+    return {
+        "domain": domain,
+        "metrics": await fetch_yaml("metrics.yaml"),
+        "ontology": await fetch_yaml("ontology.yaml"),
+        "glossary": await fetch_yaml("glossary.yaml"),
+        "sensitivity": await fetch_yaml("sensitivity.yaml"),
+        "domain_rules": await fetch_md("domain-rules.md"),
+        "data_quality": await fetch_md("data-quality.md"),
+        "dimension_profiles": {},
+    }
+
+
+async def _list_domains_remote(repo_client) -> list[dict]:
+    content = await repo_client.fetch_file("scan-config.yaml")
+    scan_config = yaml.safe_load(content)
+    result = []
+    for d in scan_config.get("domains", []):
+        result.append({
+            "name": d["name"],
+            "metric_count": 0,
+            "dimension_count": 0,
+            "trigger_aliases": [],
+        })
+    return result
+
+
 # ── MCP server factory ────────────────────────────────────────────────────────
 
-def create_app(repo_root: Path) -> Server:
+def create_app(repo_root: Path, repo_client=None, auth_config=None) -> Server:
     app = Server("canon-mcp")
     cache = _DomainCache()
 
@@ -170,14 +242,20 @@ def create_app(repo_root: Path) -> Server:
     @app.call_tool()
     async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         if name == "list_domains":
-            domains = _list_domains(repo_root)
+            if repo_client is not None:
+                domains = await _list_domains_remote(repo_client)
+            else:
+                domains = _list_domains(repo_root)
             return [TextContent(type="text", text=json.dumps(domains, indent=2))]
 
         elif name == "get_domain_context":
             domain = arguments.get("domain", "")
             if not domain:
                 return [TextContent(type="text", text='{"error": "domain is required"}')]
-            ctx = cache.get(domain, repo_root)
+            if repo_client is not None:
+                ctx = await _assemble_domain_remote(domain, repo_client)
+            else:
+                ctx = cache.get(domain, repo_root)
             return [TextContent(type="text", text=json.dumps(ctx, indent=2, default=str))]
 
         return [TextContent(type="text", text=json.dumps({"error": f"Unknown tool: {name}"}))]
@@ -202,7 +280,10 @@ async def run_http_server(repo_root: Path, port: int = 8000) -> None:
     from starlette.routing import Mount, Route
     from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 
-    app = create_app(repo_root)
+    repo_client = _create_repo_client()
+    auth_config = _create_auth_config()
+
+    app = create_app(repo_root, repo_client=repo_client, auth_config=auth_config)
     session_manager = StreamableHTTPSessionManager(app, json_response=True, stateless=True)
 
     async def handle_mcp(scope, receive, send):
@@ -211,13 +292,21 @@ async def run_http_server(repo_root: Path, port: int = 8000) -> None:
     async def healthz(request: Request) -> JSONResponse:
         return JSONResponse({"status": "ok"})
 
-    starlette_app = Starlette(
-        routes=[
-            Route("/healthz", healthz, methods=["GET"]),
-            Route("/readyz", healthz, methods=["GET"]),
-            Mount("/mcp", app=handle_mcp),
-        ]
-    )
+    routes = [
+        Route("/healthz", healthz, methods=["GET"]),
+        Route("/readyz", healthz, methods=["GET"]),
+    ]
+
+    if auth_config:
+        from serving.auth import resource_metadata_route, create_auth_middleware
+        routes.append(Route("/.well-known/oauth-protected-resource", resource_metadata_route(auth_config), methods=["GET"]))
+        mcp_handler = create_auth_middleware(auth_config)(handle_mcp)
+    else:
+        mcp_handler = handle_mcp
+
+    routes.append(Mount("/mcp", app=mcp_handler))
+
+    starlette_app = Starlette(routes=routes)
 
     async with session_manager.run():
         config = uvicorn.Config(starlette_app, host="0.0.0.0", port=port, log_level="info")
