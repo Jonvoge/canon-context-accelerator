@@ -319,9 +319,11 @@ async def run_http_server(repo_root: Path, port: int = 8000) -> None:
     ]
 
     if auth_config:
-        from serving.auth import resource_metadata_route, authorization_server_metadata_route, token_proxy_route, create_asgi_auth_middleware
+        from serving.auth import resource_metadata_route, authorization_server_metadata_route, authorization_proxy_route, token_proxy_route, create_asgi_auth_middleware
         routes.append(Route("/.well-known/oauth-protected-resource", resource_metadata_route(auth_config), methods=["GET"]))
         routes.append(Route("/.well-known/oauth-authorization-server", authorization_server_metadata_route(auth_config), methods=["GET"]))
+        routes.append(Route("/authorize", authorization_proxy_route(auth_config), methods=["GET"]))
+        routes.append(Route("/token", token_proxy_route(auth_config), methods=["POST"]))
         routes.append(Route("/oauth/token", token_proxy_route(auth_config), methods=["POST"]))
         mcp_handler = create_asgi_auth_middleware(auth_config)(handle_mcp)
     else:

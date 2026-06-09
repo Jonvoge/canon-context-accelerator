@@ -97,16 +97,14 @@ def resource_metadata_route(config: AuthConfig) -> Callable:
 def authorization_server_metadata_route(config: AuthConfig) -> Callable:
     """Returns a Starlette endpoint that serves RFC 8414 Authorization Server Metadata.
 
-    Points authorization_endpoint to Entra (user login) but token_endpoint to ourselves
-    so we can proxy the token exchange with the correct client_secret encoding.
+    issuer and all endpoints point to ourselves — claude.ai ignores external endpoints
+    and always constructs /authorize and /token relative to the MCP server host.
     """
     async def endpoint(request: Request) -> JSONResponse:
-        entra = f"https://login.microsoftonline.com/{config.tenant_id}/oauth2/v2.0"
         return JSONResponse({
-            "issuer": f"https://login.microsoftonline.com/{config.tenant_id}/v2.0",
-            "authorization_endpoint": f"{entra}/authorize",
-            "token_endpoint": f"{config.base_url}/oauth/token",
-            "registration_endpoint": None,
+            "issuer": config.base_url,
+            "authorization_endpoint": f"{config.base_url}/authorize",
+            "token_endpoint": f"{config.base_url}/token",
             "scopes_supported": [
                 f"api://{config.client_id}/access",
                 "openid",
@@ -119,21 +117,31 @@ def authorization_server_metadata_route(config: AuthConfig) -> Callable:
     return endpoint
 
 
+def authorization_proxy_route(config: AuthConfig) -> Callable:
+    """Redirects Claude's /authorize request to Entra, passing all query params through."""
+    async def endpoint(request: Request) -> Response:
+        from urllib.parse import urlencode
+        entra_url = f"https://login.microsoftonline.com/{config.tenant_id}/oauth2/v2.0/authorize"
+        params = dict(request.query_params)
+        params.pop("resource", None)  # Entra v2.0 uses scope, not resource
+        params["client_id"] = config.client_id
+        redirect_to = f"{entra_url}?{urlencode(params)}"
+        return Response(status_code=302, headers={"location": redirect_to})
+    return endpoint
+
+
 def token_proxy_route(config: AuthConfig) -> Callable:
     """Proxies token requests to Entra, injecting the correct client_secret server-side.
 
-    This avoids issues with HTTP libraries that percent-encode ~ in form bodies,
-    which Entra rejects.
+    claude.ai ignores token_endpoint in metadata and always POSTs to /token on the MCP
+    server host, so this is mounted at both /token and /oauth/token.
     """
     async def endpoint(request: Request) -> Response:
         body = await request.body()
-        # Parse the form body from the client
         from urllib.parse import parse_qs, urlencode
         params = parse_qs(body.decode("utf-8"), keep_blank_values=True)
-        # Flatten single-value lists
         flat: dict[str, str] = {k: v[0] for k, v in params.items()}
         flat.pop("resource", None)  # Entra v2.0 uses scope, not resource
-        # Inject our client_secret (overrides whatever the client sent)
         flat["client_id"] = config.client_id
         flat["client_secret"] = config.client_secret
 
