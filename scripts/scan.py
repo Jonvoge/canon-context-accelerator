@@ -318,8 +318,13 @@ def run_scan(
     return result
 
 
-def create_github_issues(result: ScanResult, repo_slug: str, token: str) -> None:
-    """Create GitHub issues for high/medium findings in the scan result."""
+def create_github_issues(result: ScanResult, repo_slug: str, token: str, notify: list[str] | None = None) -> None:
+    """
+    Create GitHub issues for high/medium findings in the scan result.
+
+    notify: list of @handles to mention on each issue so GitHub emails them
+            natively (the v5 digest mechanism — no Teams, no SMTP required).
+    """
     import requests as _req
 
     if not token or not repo_slug:
@@ -339,6 +344,10 @@ def create_github_issues(result: ScanResult, repo_slug: str, token: str) -> None
         "dimension_values": "dimension-values",
     }
 
+    mention = ""
+    if notify:
+        mention = "\n\n---\ncc " + " ".join(notify)
+
     for finding in result.findings:
         if finding.severity == "low":
             continue
@@ -353,6 +362,7 @@ def create_github_issues(result: ScanResult, repo_slug: str, token: str) -> None
             f"**Description:**\n{finding.description}\n\n"
             f"**Suggested Action:**\n{finding.suggested_action}\n\n"
             f"**Scan Run:** {finding.scan_run_id}"
+            f"{mention}"
         )
         payload = {
             "title": f"[Drift] {finding.subject}",

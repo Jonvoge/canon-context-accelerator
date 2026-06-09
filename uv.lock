@@ -333,12 +333,8 @@ version = "1.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
-    { name = "anthropic" },
     { name = "azure-identity" },
-    { name = "botbuilder-core" },
-    { name = "botbuilder-integration-aiohttp" },
     { name = "click" },
-    { name = "gitpython" },
     { name = "jsonschema" },
     { name = "mcp" },
     { name = "pyodbc" },
@@ -350,6 +346,7 @@ dependencies = [
 
 [package.optional-dependencies]
 bootstrap = [
+    { name = "anthropic" },
     { name = "beautifulsoup4" },
     { name = "openpyxl" },
     { name = "pymupdf" },
@@ -363,17 +360,24 @@ dev = [
     { name = "respx" },
     { name = "ruff" },
 ]
+teams-bot = [
+    { name = "anthropic" },
+    { name = "botbuilder-core" },
+    { name = "botbuilder-integration-aiohttp" },
+    { name = "gitpython" },
+]
 
 [package.metadata]
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.9" },
-    { name = "anthropic", specifier = ">=0.25" },
+    { name = "anthropic", marker = "extra == 'bootstrap'", specifier = ">=0.25" },
+    { name = "anthropic", marker = "extra == 'teams-bot'", specifier = ">=0.25" },
     { name = "azure-identity", specifier = ">=1.15" },
     { name = "beautifulsoup4", marker = "extra == 'bootstrap'", specifier = ">=4.12" },
-    { name = "botbuilder-core", specifier = ">=4.15" },
-    { name = "botbuilder-integration-aiohttp", specifier = ">=4.15" },
+    { name = "botbuilder-core", marker = "extra == 'teams-bot'", specifier = ">=4.15" },
+    { name = "botbuilder-integration-aiohttp", marker = "extra == 'teams-bot'", specifier = ">=4.15" },
     { name = "click", specifier = ">=8.1" },
-    { name = "gitpython", specifier = ">=3.1" },
+    { name = "gitpython", marker = "extra == 'teams-bot'", specifier = ">=3.1" },
     { name = "jsonschema", specifier = ">=4.20" },
     { name = "mcp", specifier = ">=1.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10" },
@@ -391,7 +395,7 @@ requires-dist = [
     { name = "starlette", specifier = ">=0.40" },
     { name = "uvicorn", specifier = ">=0.30" },
 ]
-provides-extras = ["bootstrap", "dev"]
+provides-extras = ["bootstrap", "teams-bot", "dev"]
 
 [[package]]
 name = "certifi"

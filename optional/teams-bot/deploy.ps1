@@ -78,7 +78,6 @@ $sqlDatabase     = if ($env:CANON_SQL_DATABASE)         { $env:CANON_SQL_DATABAS
 $anthropicKey    = Require-EnvVar "ANTHROPIC_API_KEY"
 $msAppId         = Require-EnvVar "MICROSOFT_APP_ID"
 $msAppPassword   = Require-EnvVar "MICROSOFT_APP_PASSWORD"
-$msAppTenantId   = Require-EnvVar "MICROSOFT_APP_TENANT_ID"
 $githubRepo      = Require-EnvVar "CANON_GITHUB_REPO"
 $githubToken     = Require-EnvVar "CANON_GITHUB_TOKEN"
 
@@ -218,7 +217,6 @@ if (-not $McpOnly) {
     $botEnvVars = @(
         "MICROSOFT_APP_ID=$msAppId"
         "MICROSOFT_APP_PASSWORD=secretref:bot-app-password"
-        "MICROSOFT_APP_TENANT_ID=$msAppTenantId"
         "CANON_GITHUB_REPO=$githubRepo"
         "CANON_GITHUB_TOKEN=secretref:github-token"
         "ANTHROPIC_API_KEY=secretref:anthropic-key"

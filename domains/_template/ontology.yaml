@@ -1,4 +1,39 @@
 # yaml-language-server: $schema=../../schemas/ontology.schema.json
+#
+# ontology.yaml — Governed dimension definitions for this domain.
+#
+# HOW TO USE:
+#   One entry per business dimension (a column used for filtering/grouping).
+#   Agents use ontology entries to understand categorical values and route filters correctly.
+#
+# KEY FIELDS:
+#   name            — Human-readable dimension name (e.g. "Product Category").
+#   column          — Physical column reference as "Table.Column" (case-sensitive, must exist
+#                     in the semantic model or warehouse). Used by the scan to detect drift.
+#   aliases         — Other names users use for this dimension (e.g. "Category", "Cat").
+#   enumerate       — Set true if this dimension has a bounded, knowable set of values (< ~50).
+#                     The scan will track value drift when true.
+#   value_descriptions — Only required when `enumerate: true`.
+#                     Map each canonical value to a plain-language description that helps
+#                     agents answer "what does Tier 1 mean?" questions correctly.
+#
+# WHEN TO ADD A DIMENSION:
+#   - Any column your users ask "filter by" or "break down by" questions about.
+#   - Any dimension where value naming is ambiguous ("A", "B", "C") or counter-intuitive.
+#   - Any dimension where new values appearing without a definition would cause wrong answers.
+#
 schema_version: "1.0"
 domain: __DOMAIN_SLUG__
-dimensions: []
+dimensions:
+  # Example entry (delete or replace):
+  # - name: Order Status
+  #   column: fact_sales.order_status
+  #   aliases:
+  #     - Status
+  #     - Transaction Status
+  #   enumerate: true
+  #   value_descriptions:
+  #     Completed: "Order shipped and delivered. Revenue recognised."
+  #     Pending: "Order placed but not yet shipped. Exclude from revenue."
+  #     Cancelled: "Order voided. Exclude from all financial metrics."
+  #     Returned: "Post-delivery return. Reduces net revenue."

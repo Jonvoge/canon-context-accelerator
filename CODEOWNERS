@@ -1,6 +1,17 @@
 # Canon CODEOWNERS
-# Each domain folder requires review from the domain owner(s).
-# Shared rules and automation require repo-admin review.
+#
+# Data owners defined here receive a PR review request whenever someone edits
+# a domain folder. GitHub also uses this file to enforce the review gate on merge.
+#
+# HOW TO ADD DOMAIN OWNERS:
+#   1. Uncomment the /domains/<slug>/ line below (or add a new one).
+#   2. Replace @handle with real GitHub usernames.
+#   3. The same handles should appear in scan-config.yaml → domains[].owners
+#      so they also get @mentioned on drift issues from the scheduled scan.
+#   4. Open a PR with both changes together so ownership is consistent.
+#
+# Format: <path pattern> <github-username> [<github-username> ...]
+# See: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
 
 # Shared conventions
 /shared/ @Jonvoge
@@ -15,5 +26,5 @@
 # Schemas
 /schemas/ @Jonvoge
 
-# Domain ownership (add domain owners below)
+# Domain ownership — add one line per domain, uncomment when ready
 # /domains/retail/ @finance-lead @analytics-lead

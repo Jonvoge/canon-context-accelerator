@@ -48,7 +48,7 @@
     "schedules": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["scan_cron", "eval_cron", "timezone"],
+      "required": ["scan_cron", "timezone"],
       "properties": {
         "scan_cron": { "$ref": "#/$defs/nonEmptyString" },
         "eval_cron": { "$ref": "#/$defs/nonEmptyString" },
@@ -90,8 +90,7 @@
         "path",
         "owners",
         "profile_dimensions",
-        "issue_labels",
-        "escalation"
+        "issue_labels"
       ],
       "properties": {
         "name": { "$ref": "#/$defs/slug" },

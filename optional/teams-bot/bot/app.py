@@ -30,6 +30,7 @@ def create_app() -> web.Application:
     adapter_settings = BotFrameworkAdapterSettings(
         app_id=microsoft_app_id,
         app_password=microsoft_app_password,
+        app_tenantid=microsoft_app_tenant_id,
         channel_auth_tenant=microsoft_app_tenant_id,
     )
     adapter = BotFrameworkAdapter(adapter_settings)

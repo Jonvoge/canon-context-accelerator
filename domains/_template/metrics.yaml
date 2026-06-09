@@ -1,4 +1,59 @@
 # yaml-language-server: $schema=../../schemas/metrics.schema.json
+#
+# metrics.yaml — Governed metric definitions for this domain.
+#
+# HOW TO USE:
+#   1. Copy this file (or run `canon bootstrap --domain <slug>`) to generate initial entries.
+#   2. Each entry in `metrics:` documents ONE business measure.
+#   3. Fill in every field. Fields marked "# TODO" must be completed before the PR can merge.
+#   4. Run `uv run canon validate --domain <slug>` locally to check schema and cross-file rules.
+#
+# KEY FIELDS:
+#   name            — Exact measure name as it appears in the semantic model. Case-sensitive.
+#   definition      — Plain-language business definition. 1-3 sentences. Precision matters.
+#                     Users will quote this to AI agents. "Total revenue before returns" is good;
+#                     "Revenue metric" is not.
+#   aliases         — Other names people use for this measure in reports, Slack, or conversation.
+#                     Agents use aliases to match user intent. Include abbreviations and variants.
+#   governed_sources — Where agents should query this measure. primary is required.
+#                     Add a `warehouse` fallback if the measure has a SQL equivalent.
+#   routing         — One or two sentences telling agents WHEN to use primary vs. fallback,
+#                     and any query constraints (date filters, exclusion rules, etc.).
+#   sensitivity     — "public" | "internal" | "confidential" | "restricted"
+#                     Match your organisation's data classification policy.
+#   status          — "active" | "deprecated" | "draft"
+#                     "draft" entries are included in Canon but flagged for review.
+#   depends_on      — Names of other measures this one is mathematically derived from.
+#                     Used to detect upstream drift. Leave empty if standalone.
+#
+# REVIEW GATE:
+#   The `review.yml` workflow validates this file on every PR touching domains/.
+#   Schema errors block merge. Consistency warnings are posted as review comments.
+#
 schema_version: "1.0"
 domain: __DOMAIN_SLUG__
-metrics: []
+metrics:
+  # Example entry (delete or replace):
+  # - name: Total Revenue
+  #   domain: __DOMAIN_SLUG__
+  #   owner: Analytics Team
+  #   last_reviewed: "2026-01-01"
+  #   status: active
+  #   aliases:
+  #     - Revenue
+  #     - Net Sales
+  #   definition: >
+  #     Sum of net transaction value after discounts, before returns.
+  #     Excludes inter-company transfers and VAT.
+  #   governed_sources:
+  #     primary:
+  #       platform: fabric
+  #       type: semantic_model
+  #       workspace: "My Workspace"
+  #       model: "MySemanticModel"
+  #       measure: "Total Revenue"
+  #   routing: >
+  #     Query primary for all revenue questions. If the user asks about historical
+  #     data before 2020, use the warehouse fallback (pre-migration data).
+  #   depends_on: []
+  #   sensitivity: internal

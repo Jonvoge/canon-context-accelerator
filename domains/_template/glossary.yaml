@@ -1,4 +1,35 @@
 # yaml-language-server: $schema=../../schemas/glossary.schema.json
+#
+# glossary.yaml — Business term definitions for this domain.
+#
+# HOW TO USE:
+#   One entry per business term that is ambiguous, domain-specific, or frequently
+#   misunderstood. Not every word needs a glossary entry — only terms where a wrong
+#   interpretation would cause wrong AI answers.
+#
+# KEY FIELDS:
+#   term            — The canonical business term (e.g. "Gross Margin").
+#   definition      — Plain-language definition. 1-3 sentences.
+#   aliases         — Variants and abbreviations (e.g. "GM", "Margin %").
+#   related_metrics — Names of metrics.yaml entries that depend on or implement this term.
+#
+# GOOD GLOSSARY ENTRIES:
+#   - Terms with multiple meanings in different contexts ("Revenue" vs "Net Revenue")
+#   - Business jargon not in any dictionary ("Comparable Store", "Store Cohort")
+#   - Acronyms your organisation uses ("LTM", "MTD", "4W MA")
+#   - Terms that conflict with platform naming (a metric named "Sales" that means "orders")
+#
 schema_version: "1.0"
 domain: __DOMAIN_SLUG__
-terms: []
+terms:
+  # Example entry (delete or replace):
+  # - term: Gross Margin
+  #   definition: >
+  #     Revenue minus cost of goods sold, expressed as a percentage of revenue.
+  #     Does not include operating expenses, interest, or tax.
+  #   aliases:
+  #     - GM
+  #     - Margin %
+  #   related_metrics:
+  #     - Gross Margin %
+  #     - Gross Profit

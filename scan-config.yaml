@@ -1,49 +1,120 @@
 # yaml-language-server: $schema=schemas/scan-config.schema.json
+#
+# scan-config.yaml — Canon connection and domain registry.
+#
+# THIS IS THE MAIN FILE YOU EDIT WHEN ONBOARDING A CLIENT.
+#
+# THREE THINGS TO CONFIGURE:
+#
+#   1. CONNECTORS — tell Canon where to find semantic models and warehouses.
+#      One connector entry per source. The id is just a slug you reference below.
+#
+#      type must be one of:
+#        fabric_semantic  — Power BI / Fabric semantic model (executeQueries API)
+#        fabric_sql       — Fabric SQL endpoint, warehouse, or lakehouse
+#        snowflake        — Snowflake (connector exists, not yet validated with live data)
+#        databricks       — Databricks (connector exists, not yet validated with live data)
+#
+#      For fabric_semantic (Power BI / Fabric semantic model):
+#        workspace_id  — GUID from the workspace URL in Power BI service.
+#                        app.powerbi.com/groups/<workspace_id>/...
+#        dataset_name  — Exact name of the semantic model (dataset) as it appears
+#                        in the Power BI workspace. Case-sensitive.
+#
+#      For fabric_sql (Fabric SQL endpoint / warehouse / lakehouse):
+#        server        — SQL connection string from the workspace → item →
+#                        "Copy SQL connection string". Format:
+#                        <guid>.database.fabric.microsoft.com,1433
+#        database      — Exact database name from the same connection dialog.
+#
+#      auth_secret_name — The name of the GitHub Actions secret that holds the
+#        service principal client secret. All connectors in the same tenant can
+#        share one secret. The secret value is the SP client secret from Entra ID.
+#        The SP needs: Power BI Admin API → Dataset.ReadWrite.All + Workspace.Read.All
+#        Corresponding tenant/client ID are set via CANON_FABRIC_TENANT_ID and
+#        CANON_FABRIC_CLIENT_ID Actions secrets.
+#
+#   2. DOMAINS — one entry per business domain you want Canon to govern.
+#      owners        — GitHub @handles of the domain owners. They are @mentioned on
+#                      every drift issue the scan opens (GitHub emails them natively).
+#                      Also add them to CODEOWNERS for the domain folder.
+#      semantic_connector — id of the connector entry above that holds this domain's
+#                      measures and dimensions. Must match exactly.
+#      warehouse_connector — id of the SQL connector for this domain (optional but
+#                      recommended — used for row-level detail queries via MCP).
+#      profile_dimensions — names of dimensions whose values the scan tracks for
+#                      drift. Use the exact Name value from ontology.yaml.
+#      digest_target — @GitHub handle or team to cc on all drift issues for this domain.
+#                      Separate from owners: use this for a team lead who isn't an
+#                      individual reviewer.
+#
+#   3. SECRETS (set in GitHub repo → Settings → Secrets and variables → Actions)
+#      Required secrets:
+#        CANON_FABRIC_CLIENT_SECRET — SP client secret (shared across connectors)
+#        CANON_FABRIC_TENANT_ID     — Azure AD tenant GUID
+#        CANON_FABRIC_CLIENT_ID     — SP application (client) GUID
+#      Required variables:
+#        CANON_FABRIC_WORKSPACE_ID  — Power BI workspace GUID (overrides options below)
+#        CANON_FABRIC_DATASET_NAME  — Semantic model name (overrides options below)
+#      Optional secrets:
+#        CANON_SQL_SERVER           — SQL endpoint (overrides options below)
+#        CANON_SQL_DATABASE         — Database name (overrides options below)
+#        ANTHROPIC_API_KEY          — Enables LLM-enriched definitions during bootstrap
+#
 schema_version: "1.0"
 
 scanner:
-  distinct_value_cap: 500
+  distinct_value_cap: 500   # max distinct values profiled per dimension
   max_workers: 4
-  stale_after_hours: 168  # 7 days
+  stale_after_hours: 168    # 7 days — findings after this period trigger a staleness warning
   fail_on_schema_error: true
   publish_cache_artifact: true
 
 schedules:
-  scan_cron: "0 6 * * 1"  # Monday 06:00
-  eval_cron: "0 7 * * 1"  # Monday 07:00
+  scan_cron: "0 6 * * 1"   # Monday 06:00 UTC — adjust to your timezone
+  # eval_cron is optional — evals run on workflow_dispatch only (not a merge gate)
   timezone: "Europe/Copenhagen"
 
+# ── Connectors ─────────────────────────────────────────────────────────────────
+# Replace the values below with your actual workspace/model/database details.
+# You can define multiple connectors and reference them from multiple domains.
 connectors:
-  - id: retail-semantic
-    type: fabric_semantic
+  - id: retail-semantic          # slug — referenced by domains.semantic_connector
+    type: fabric_semantic         # valid types: fabric_semantic | fabric_sql | snowflake | databricks
     auth_secret_name: CANON_FABRIC_CLIENT_SECRET
     options:
-      workspace_id: "b53e615a-ab79-49f9-bcf0-67250a34f633"
-      dataset_name: "RetailSemanticModel"
+      workspace_id: "b53e615a-ab79-49f9-bcf0-67250a34f633"   # TODO: your workspace GUID
+      dataset_name: "RetailSemanticModel"                      # TODO: your semantic model name
 
-  - id: retail-sql
-    type: fabric_sql
+  - id: retail-sql               # slug — referenced by domains.warehouse_connector
+    type: fabric_sql              # valid types: fabric_semantic | fabric_sql | snowflake | databricks
     auth_secret_name: CANON_FABRIC_CLIENT_SECRET
     options:
-      server: "eibo3j4ddcgerc53n3spaq62nu-ljqt5nlzvp4utphqm4squnhwgm.database.fabric.microsoft.com,1433"
-      database: "RetailDemoDB-e152e30b-3c31-4b9e-93e2-307de0004d9e"
+      server: "eibo3j4ddcgerc53n3spaq62nu-ljqt5nlzvp4utphqm4squnhwgm.database.fabric.microsoft.com,1433"  # TODO: your SQL endpoint
+      database: "RetailDemoDB-e152e30b-3c31-4b9e-93e2-307de0004d9e"                                         # TODO: your database name
 
+# ── Domains ────────────────────────────────────────────────────────────────────
+# One entry per domain. The domain folder must exist at domains/<name>/.
+# Run `canon bootstrap --domain <name>` after adding a domain here.
 domains:
   - name: retail
     path: domains/retail
     owners:
-      - "@finance-lead"
-    semantic_connector: retail-semantic
-    warehouse_connector: retail-sql
+      - "@finance-lead"          # TODO: GitHub @handle of the domain owner(s)
+                                 # They are @mentioned on every drift issue (GitHub emails them).
+                                 # Also add them to CODEOWNERS → /domains/retail/ below.
+    semantic_connector: retail-semantic    # references the connector id above
+    warehouse_connector: retail-sql        # references the connector id above
     profile_dimensions:
-      - Order Status
+      - Order Status             # TODO: Names must match the `name` field in ontology.yaml exactly
       - Product Category
       - Store Region
     issue_labels:
       - "domain:retail"
       - "drift"
-    digest_target: "finance-lead@company.com"
-    escalation:
-      manager: "@analytics-lead"
-      high_priority_days: 3
-      low_priority_auto_close_days: 30
+    digest_target: "@finance-lead"   # @mention on all drift issues for GitHub-native notifications
+    # escalation is optional in v1. Uncomment and fill if you need SLA-based escalation.
+    # escalation:
+    #   manager: "@analytics-lead"
+    #   high_priority_days: 3
+    #   low_priority_auto_close_days: 30

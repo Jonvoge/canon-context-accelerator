@@ -1,9 +1,7 @@
 name: Canon Eval
+# Run on demand only — this is a sales proof point, not a merge gate.
+# ANTHROPIC_API_KEY must be set as an Actions secret for this to work.
 on:
-  schedule:
-    - cron: '0 7 * * 1'  # Monday 07:00 UTC
-  pull_request:
-    paths: ['domains/**']
   workflow_dispatch:
 
 permissions:

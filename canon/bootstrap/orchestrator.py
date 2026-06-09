@@ -5,12 +5,17 @@ Stages:
   1. Parse uploaded documentation from bootstrap-docs/{domain}/
   2. Scan the platform connector for current metadata
   3. Cross-reference doc mentions against platform measures (exact + fuzzy)
-  4. Draft metrics.yaml, ontology.yaml, glossary.yaml entries via LLM
+  4. Draft metrics.yaml / ontology.yaml entries:
+       - Deterministic stubs always (no API key required)
+       - LLM enrichment when ANTHROPIC_API_KEY is set (optional)
   5. Create branch + commit drafts + open draft PR
   6. Write bootstrap-report.json with confidence scores and evidence
 
+Re-running is safe (idempotent): already-documented measures are preserved untouched.
+Only undocumented measures are added to the draft PR.
+
 Usage:
-  uv run python -m scripts.cli bootstrap --domain retail
+  uv run canon bootstrap --domain retail
 """
 
 from __future__ import annotations
@@ -25,7 +30,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-import anthropic
 import yaml
 
 from canon.bootstrap.parsing.parsers import parse_directory, ParsedChunk
@@ -90,10 +94,23 @@ def _find_doc_mentions(measure_name: str, chunks: list[ParsedChunk], min_length:
     return results[:3]  # cap at 3 snippets per measure
 
 
-# ── LLM drafting ─────────────────────────────────────────────────────────────
+# ── LLM drafting (optional — only when ANTHROPIC_API_KEY is set) ─────────────
+
+def _try_import_anthropic() -> Any:
+    """Return anthropic.Anthropic client if available and API key set, else None."""
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        return None
+    try:
+        import anthropic as _anthropic
+        return _anthropic.Anthropic(api_key=api_key)
+    except ImportError:
+        logger.warning("anthropic package not installed — LLM drafting disabled")
+        return None
+
 
 def _draft_metric_from_evidence(
-    client: anthropic.Anthropic,
+    client: Any,
     measure_name: str,
     evidence: BootstrapEvidence,
     domain: str,
@@ -106,9 +123,9 @@ def _draft_metric_from_evidence(
 
     prompt = textwrap.dedent(f"""
         Draft a Canon metric definition for the measure named "{measure_name}" in the {domain} domain.
-        
-        This measure exists in the platform (Fabric semantic model: RetailSemanticModel).{doc_text}
-        
+
+        This measure exists in the platform (Fabric semantic model).{doc_text}
+
         Produce ONE metrics.yaml entry as JSON in this exact structure:
         {{
             "name": "{measure_name}",
@@ -116,25 +133,23 @@ def _draft_metric_from_evidence(
             "owner": "{domain.title()} Analytics Team",
             "last_reviewed": "{today}",
             "status": "active",
-            "aliases": ["<alias1>", "<alias2>"],
+            "aliases": [],
             "definition": "<clear 1-3 sentence business definition derived from the evidence above>",
             "governed_sources": {{
                 "primary": {{
                     "platform": "fabric",
                     "type": "semantic_model",
-                    "workspace": "Fabric Demos: Retail Planning",
-                    "model": "RetailSemanticModel",
                     "measure": "{measure_name}"
                 }}
             }},
-            "routing": "Query primary (RetailSemanticModel) for direct metric questions.",
+            "routing": "Query primary semantic model for direct metric questions.",
             "depends_on": [],
             "sensitivity": "internal"
         }}
-        
+
         Return ONLY valid JSON (no prose, no markdown fences).
         If the documentation contains a clear definition, use it verbatim.
-        If not, write a conservative inferred definition and note uncertainty.
+        If not, write a conservative inferred definition.
     """).strip()
 
     response = client.messages.create(
@@ -152,7 +167,7 @@ def _draft_metric_from_evidence(
 
 
 def _draft_ontology_dimension(
-    client: anthropic.Anthropic,
+    client: Any,
     table: str,
     column: str,
     sample_values: list[str],
@@ -162,7 +177,7 @@ def _draft_ontology_dimension(
     prompt = textwrap.dedent(f"""
         Draft a Canon ontology dimension entry for the column {table}.{column} in the {domain} domain.
         Sample values: {sample_values[:10]}
-        
+
         Return ONE dimension entry as JSON:
         {{
             "name": "<human-readable dimension name>",
@@ -171,7 +186,7 @@ def _draft_ontology_dimension(
             "enumerate": {str(len(sample_values) <= 20).lower()},
             "value_descriptions": {{}}
         }}
-        
+
         Return ONLY valid JSON.
     """).strip()
 
@@ -189,6 +204,31 @@ def _draft_ontology_dimension(
     return json.loads(raw.strip())
 
 
+# ── Deterministic stub (no LLM) ───────────────────────────────────────────────
+
+def _stub_metric(measure_name: str, domain: str, today: str) -> dict:
+    """Build a minimal metrics.yaml stub without LLM — all TODO fields for human review."""
+    return {
+        "name": measure_name,
+        "domain": domain,
+        "owner": f"{domain.title()} Analytics Team",
+        "last_reviewed": today,
+        "status": "active",
+        "aliases": [],
+        "definition": "# TODO: add business definition",
+        "governed_sources": {
+            "primary": {
+                "platform": "fabric",
+                "type": "semantic_model",
+                "measure": measure_name,
+            }
+        },
+        "routing": "# TODO: add routing instructions",
+        "depends_on": [],
+        "sensitivity": "internal",
+    }
+
+
 # ── Main orchestrator ─────────────────────────────────────────────────────────
 
 def run_bootstrap(
@@ -202,11 +242,12 @@ def run_bootstrap(
     now_iso = datetime.now(timezone.utc).isoformat()
     branch = f"canon/bootstrap/{domain}-{datetime.now(timezone.utc).strftime('%Y%m%d')}"
 
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-    if not api_key:
-        raise ValueError("ANTHROPIC_API_KEY is required for bootstrap")
-
-    client = anthropic.Anthropic(api_key=api_key)
+    # LLM client is optional — deterministic stubs are always produced first
+    llm_client = _try_import_anthropic()
+    if llm_client:
+        logger.info("ANTHROPIC_API_KEY found — LLM enrichment enabled")
+    else:
+        logger.info("No ANTHROPIC_API_KEY — deterministic stubs only (add key to enable LLM enrichment)")
 
     report = BootstrapReport(
         domain=domain,
@@ -285,33 +326,17 @@ def run_bootstrap(
         else:
             confidence = "medium"  # platform-only
 
-        try:
-            metric_entry = _draft_metric_from_evidence(client, measure_name, evidence, domain, today)
-            needs_interview = confidence == "low"
-        except Exception as e:
-            logger.warning("LLM draft failed for '%s': %s", measure_name, e)
-            metric_entry = {
-                "name": measure_name,
-                "domain": domain,
-                "owner": f"{domain.title()} Analytics Team",
-                "last_reviewed": today,
-                "status": "active",
-                "aliases": [],
-                "definition": "# TODO: add definition",
-                "governed_sources": {
-                    "primary": {
-                        "platform": "fabric",
-                        "type": "semantic_model",
-                        "workspace": "Fabric Demos: Retail Planning",
-                        "model": "RetailSemanticModel",
-                        "measure": measure_name,
-                    }
-                },
-                "routing": "# TODO: add routing instructions",
-                "depends_on": [],
-                "sensitivity": "internal",
-            }
-            confidence = "low"
+        if llm_client:
+            try:
+                metric_entry = _draft_metric_from_evidence(llm_client, measure_name, evidence, domain, today)
+                needs_interview = confidence == "low"
+            except Exception as e:
+                logger.warning("LLM draft failed for '%s': %s", measure_name, e)
+                metric_entry = _stub_metric(measure_name, domain, today)
+                confidence = "low"
+                needs_interview = True
+        else:
+            metric_entry = _stub_metric(measure_name, domain, today)
             needs_interview = True
 
         drafts.append(BootstrapDraft(
@@ -336,38 +361,40 @@ def run_bootstrap(
     }
 
     new_dimensions = []
-    for table in snapshot.tables:
-        for col in table.columns:
-            col_ref = f"{table.name}.{col.name}"
-            if col_ref in existing_dim_columns:
-                continue
-            # Only draft dimensions for likely categorical columns
-            try:
-                values = connector.profile_dimension(col_ref, max_values=30)
-            except Exception:
-                values = []
-            if values and len(values) <= 20:
+    if llm_client:
+        for table in snapshot.tables:
+            for col in table.columns:
+                col_ref = f"{table.name}.{col.name}"
+                if col_ref in existing_dim_columns:
+                    continue
                 try:
-                    dim = _draft_ontology_dimension(client, table.name, col.name, [str(v) for v in values], domain)
-                    new_dimensions.append(dim)
-                    logger.info("  Drafted dimension %s.%s [%d values]", table.name, col.name, len(values))
-                except Exception as e:
-                    logger.warning("Could not draft dimension %s.%s: %s", table.name, col.name, e)
+                    values = connector.profile_dimension(col_ref, max_values=30)
+                except Exception:
+                    values = []
+                if values and len(values) <= 20:
+                    try:
+                        dim = _draft_ontology_dimension(llm_client, table.name, col.name, [str(v) for v in values], domain)
+                        new_dimensions.append(dim)
+                        logger.info("  Drafted dimension %s.%s [%d values]", table.name, col.name, len(values))
+                    except Exception as e:
+                        logger.warning("Could not draft dimension %s.%s: %s", table.name, col.name, e)
+    else:
+        logger.info("Stage 5: LLM not available — skipping dimension drafting")
 
     if dry_run:
         logger.info("Dry run — skipping branch/PR creation")
         return report
 
-    # ── Stage 6: Commit to branch and open PR ─────────────────────────────────
+    # ── Stage 6: Commit to branch and open draft PR ───────────────────────────
     if not create_pr:
         return report
 
     try:
-        from bot import git_ops
+        from scripts import git_ops
 
         git_ops.create_branch(branch)
 
-        # metrics.yaml — append new entries
+        # metrics.yaml — append new entries (existing entries are never modified)
         new_metric_entries = [d.metric_entry for d in drafts]
         updated_metrics = dict(existing_data)
         updated_metrics.setdefault("metrics", []).extend(new_metric_entries)
@@ -376,11 +403,9 @@ def run_bootstrap(
             + _yaml.dump(updated_metrics, allow_unicode=True, sort_keys=False, default_flow_style=False)
         )
 
-        # Get current SHA if file exists
         metrics_sha = None
         try:
-            from bot.git_ops import get_file
-            mf = get_file(f"domains/{domain}/metrics.yaml")
+            mf = git_ops.get_file(f"domains/{domain}/metrics.yaml")
             metrics_sha = mf.sha
         except Exception:
             pass
@@ -403,7 +428,7 @@ def run_bootstrap(
             )
             ontology_sha = None
             try:
-                of = get_file(f"domains/{domain}/ontology.yaml")
+                of = git_ops.get_file(f"domains/{domain}/ontology.yaml")
                 ontology_sha = of.sha
             except Exception:
                 pass
@@ -416,43 +441,51 @@ def run_bootstrap(
                 sha=ontology_sha,
             )
 
-        # Bootstrap report
+        # Write bootstrap report to local cache
         cache_dir = repo_root / ".canon-cache" / domain
         cache_dir.mkdir(parents=True, exist_ok=True)
         report_path = cache_dir / "bootstrap-report.json"
         report_path.write_text(json.dumps(report.to_dict(), indent=2), encoding="utf-8")
 
-        # PR
+        # Build PR body — a checklist of inferred values for human review
         high = sum(1 for d in drafts if d.confidence == "high")
         medium = sum(1 for d in drafts if d.confidence == "medium")
         low = sum(1 for d in drafts if d.confidence == "low")
-        needs_review = [d.measure_name for d in drafts if d.needs_interview]
+        llm_mode = "LLM-enriched" if llm_client else "deterministic stubs (no LLM key)"
+        confirmed_items = [
+            f"- [ ] **{d.measure_name}** [{d.confidence}] — {d.metric_entry.get('definition', '')[:100]}"
+            for d in drafts
+        ]
 
         pr_body = textwrap.dedent(f"""
             ## Canon Bootstrap — {domain}
 
-            Auto-generated draft definitions from platform scan + document ingestion.
+            > This is a **draft PR**. Review each inferred value below, correct what's wrong, then
+            > mark this ready for review. The `review.yml` workflow will validate schema and
+            > cross-file consistency when you push changes.
 
+            **Run mode:** {llm_mode}
             **Source documents:** {', '.join(report.doc_files) if report.doc_files else 'none (platform-only)'}
             **Platform measures found:** {len(platform_measure_names)}
-            **Definitions drafted:** {len(drafts)}
+            **Already documented (preserved):** {len(existing_names)}
+            **New definitions drafted:** {len(drafts)}
 
             ### Confidence breakdown
-            - High (doc + platform match): {high}
-            - Medium (platform only): {medium}
-            - Low (LLM error / insufficient evidence): {low}
+            - High (doc evidence + platform match): {high}
+            - Medium (platform-only): {medium}
+            - Low (stub — needs human definition): {low}
 
-            ### Needs interview before merge
-            {chr(10).join(f'- [ ] {n}' for n in needs_review) if needs_review else '- None'}
+            ### Confirm or correct each inferred definition
 
-            ### Review checklist
-            - [ ] Verify definitions match business intent
-            - [ ] Add SQL usage patterns for warehouse queries
-            - [ ] Fill in any `# TODO` fields
-            - [ ] Run `canon validate --domain {domain}` before merging
-            - [ ] Run `uv run python evals/run_evals.py --domain {domain}` and check pass rate
+            {chr(10).join(confirmed_items)}
 
-            _Generated by Canon bootstrap on {today}_
+            ### Before merging
+            - [ ] Fill in all `# TODO` fields
+            - [ ] Verify `governed_sources` workspace/model/measure paths are correct
+            - [ ] Set correct `owner` and `sensitivity` per your data classification policy
+            - [ ] Run `uv run canon validate --domain {domain}` locally
+
+            _Generated by `canon bootstrap` on {today} · Re-running is safe (idempotent)_
         """).strip()
 
         pr = git_ops.open_pr(
@@ -460,10 +493,11 @@ def run_bootstrap(
             body=pr_body,
             head_branch=branch,
             base_branch="main",
+            draft=True,
             labels=["canon"],
         )
         report.pr_url = pr.get("html_url", "")
-        logger.info("PR opened: %s", report.pr_url)
+        logger.info("Draft PR opened: %s", report.pr_url)
 
     except Exception as e:
         logger.error("Failed to create PR: %s", e)

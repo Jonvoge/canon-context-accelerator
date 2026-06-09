@@ -56,7 +56,7 @@ def validate(domain: str | None, repo_root: str | None):
 @click.option("--github-token", default=None, envvar="GITHUB_TOKEN", help="GitHub token for issue creation")
 def scan(domain: str, config: str, repo_root: str | None, create_issues: bool, github_repo: str | None, github_token: str | None):
     """Run structural scan for a domain."""
-    from scripts.scan import run_scan, create_github_issues
+    from scripts.scan import run_scan, create_github_issues, _get_domain_config, _load_scan_config
 
     root = Path(repo_root) if repo_root else _REPO_ROOT
     config_path = root / config
@@ -72,7 +72,12 @@ def scan(domain: str, config: str, repo_root: str | None, create_issues: bool, g
 
     if create_issues and github_repo and github_token:
         click.echo("Creating GitHub issues...")
-        create_github_issues(result, github_repo, github_token)
+        domain_cfg = _get_domain_config(_load_scan_config(config_path), domain)
+        notify = [o for o in domain_cfg.get("owners", []) if o.startswith("@")]
+        digest = domain_cfg.get("digest_target", "")
+        if digest.startswith("@") and digest not in notify:
+            notify.append(digest)
+        create_github_issues(result, github_repo, github_token, notify=notify)
 
     sys.exit(1 if any(f.severity == "high" for f in result.findings) else 0)
 
