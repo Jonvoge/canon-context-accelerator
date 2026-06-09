@@ -34,10 +34,7 @@ serving/mcp/       MCP server for agent consumption
 scripts/           CLI scripts (scan, bootstrap, init, validate)
 bootstrap-docs/    Upload source documentation here before running bootstrap
 .canon-cache/      Machine-owned cache (gitignored from main)
-.github/workflows/ Automated workflows (scan, bootstrap, review, setup, eval)
-optional/          Advanced integrations not required for v1
-  teams-bot/       Teams bot + Azure Container Apps deploy (parked, revivable)
-evals/             Optional eval harness for benchmarking answer quality
+.github/workflows/ Automated workflows (scan, bootstrap, review, setup)
 ```
 
 ---
@@ -146,8 +143,6 @@ server support (VS Code + YAML extension) get autocomplete and inline errors via
 
 | Feature | Why not in v1 | Where to find it |
 |---|---|---|
-| Teams bot | Requires Azure + Bot Framework + 11 extra env vars | `optional/teams-bot/` |
-| Eval as PR gate | Adds LLM cost and flakiness to every merge | Run manually: `eval.yml` → `workflow_dispatch` |
 | SMTP/SendGrid digest | Not needed — GitHub emails @mentioned issue assignees natively | Add one Action step when a client needs it |
 | Snowflake / Databricks | Connectors exist but untested with live data | `connectors/snowflake.py`, `connectors/databricks.py` |
 

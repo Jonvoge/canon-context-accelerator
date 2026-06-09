@@ -34,19 +34,6 @@ def init_domain(domain_slug: str, repo_root: Path | None = None) -> Path:
     bootstrap_path = repo_root / "bootstrap-docs" / domain_slug
     bootstrap_path.mkdir(parents=True, exist_ok=True)
 
-    # Create evals folder with starter questions file
-    evals_path = repo_root / "evals" / domain_slug
-    evals_path.mkdir(parents=True, exist_ok=True)
-    questions_file = evals_path / "questions.yaml"
-    if not questions_file.exists():
-        questions_file.write_text(
-            f"# yaml-language-server: $schema=../../schemas/questions.schema.json\n"
-            f'schema_version: "1.0"\n'
-            f"domain: {domain_slug}\n"
-            f"questions: []\n",
-            encoding="utf-8",
-        )
-
     return target_path
 
 

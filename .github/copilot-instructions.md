@@ -19,7 +19,6 @@ Canon is a git-native context layer for governed BI definitions. It stores human
 | `canon bootstrap --domain {slug}` | Generate definitions from docs + platform metadata |
 | `canon scan --domain {slug}` | Detect drift between platform and authored definitions |
 | `canon validate --domain {slug}` | Schema + cross-file consistency validation |
-| `canon review-consistency --domain {slug}` | Detailed cross-file reference checks |
 | `canon interview --domain {slug}` | Terminal interview for undocumented measures (requires `ANTHROPIC_API_KEY`) |
 | `canon serve` | Start MCP server (streamable-http default, port 8000) |
 
@@ -35,8 +34,7 @@ canon/schema/            — YAML schema validator
 scripts/                 — CLI commands, scan engine, git operations
 serving/mcp/             — MCP server (list_domains, get_domain_context)
 schemas/                 — JSON schemas for all YAML files
-evals/                   — evaluation question sets (workflow_dispatch only)
-.github/workflows/       — scan.yml, bootstrap.yml, review.yml, setup.yml, eval.yml
+.github/workflows/       — scan.yml, bootstrap.yml, review.yml, setup.yml
 shared/conventions.md    — naming and authoring rules
 scan-config.yaml         — connector registry and domain configuration
 ```
@@ -49,7 +47,6 @@ Load these for step-by-step guidance on specific workflows:
 |---|---|---|
 | Bootstrap Domain | `skills/bootstrap-domain/SKILL.md` | Onboarding a new domain |
 | Health Check | `skills/health-check/SKILL.md` | Running scans and triaging drift |
-| Review Consistency | `skills/review-consistency/SKILL.md` | Validating cross-file references |
 
 ## Coding Conventions
 

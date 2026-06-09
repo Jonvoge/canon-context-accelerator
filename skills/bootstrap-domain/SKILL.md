@@ -1,4 +1,4 @@
-# Bootstrap Domain Skill
+W# Bootstrap Domain Skill
 
 ## Purpose
 
@@ -24,7 +24,7 @@ Guide an agent through onboarding a new domain into Canon — from scaffolding t
 canon init --domain {slug}
 ```
 
-Creates `domains/{slug}/` from `_template` with all 6 files, plus `bootstrap-docs/{slug}/` and `evals/{slug}/`.
+Creates `domains/{slug}/` from `_template` with all 6 files, plus `bootstrap-docs/{slug}/`.
 
 ### 2. Register the domain in scan-config.yaml
 

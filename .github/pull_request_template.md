@@ -10,7 +10,6 @@
 - [ ] YAML schema validation passed
 - [ ] Cross-file consistency checks passed
 - [ ] Scan dry-run passed or not applicable
-- [ ] Evals passed or not applicable
 
 ## Reviewer Checklist
 - [ ] Business meaning is correct

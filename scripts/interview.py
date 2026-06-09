@@ -1,7 +1,6 @@
 """
 Canon interview script — CLI entry point for terminal-based definition interviews.
 
-This is the local CLI counterpart to the Teams bot interview handler.
 It runs a simple terminal interview for undocumented measures and writes
 drafted definitions directly to domains/{domain}/metrics.yaml.
 
