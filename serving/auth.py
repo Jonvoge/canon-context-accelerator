@@ -132,6 +132,7 @@ def token_proxy_route(config: AuthConfig) -> Callable:
         params = parse_qs(body.decode("utf-8"), keep_blank_values=True)
         # Flatten single-value lists
         flat: dict[str, str] = {k: v[0] for k, v in params.items()}
+        flat.pop("resource", None)  # Entra v2.0 uses scope, not resource
         # Inject our client_secret (overrides whatever the client sent)
         flat["client_id"] = config.client_id
         flat["client_secret"] = config.client_secret
