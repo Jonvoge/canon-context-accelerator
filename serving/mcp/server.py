@@ -84,6 +84,16 @@ def _assemble_domain(domain: str, repo_root: Path) -> dict[str, Any]:
     else:
         ctx["dimension_profiles"] = {}
 
+    # Resolve available_models from scan-config.yaml
+    scan_cfg_path = repo_root / "scan-config.yaml"
+    if scan_cfg_path.exists():
+        scan_cfg = yaml.safe_load(scan_cfg_path.read_text(encoding="utf-8"))
+        domain_entry = next((d for d in scan_cfg.get("domains", []) if d.get("name") == domain), None)
+        semantic_connector = domain_entry.get("semantic_connector", "") if domain_entry else ""
+        ctx["available_models"] = [semantic_connector] if semantic_connector else []
+    else:
+        ctx["available_models"] = []
+
     return ctx
 
 
@@ -176,6 +186,15 @@ async def _assemble_domain_remote(domain: str, repo_client) -> dict:
     async def fetch_md(name: str) -> str | None:
         return await repo_client.fetch_file_or_none(f"{prefix}/{name}")
 
+    scan_cfg_raw = await repo_client.fetch_file_or_none("scan-config.yaml")
+    if scan_cfg_raw:
+        scan_cfg = yaml.safe_load(scan_cfg_raw)
+        domain_entry = next((d for d in scan_cfg.get("domains", []) if d.get("name") == domain), None)
+        semantic_connector = domain_entry.get("semantic_connector", "") if domain_entry else ""
+        available_models = [semantic_connector] if semantic_connector else []
+    else:
+        available_models = []
+
     return {
         "domain": domain,
         "metrics": await fetch_yaml("metrics.yaml"),
@@ -185,6 +204,7 @@ async def _assemble_domain_remote(domain: str, repo_client) -> dict:
         "domain_rules": await fetch_md("domain-rules.md"),
         "data_quality": await fetch_md("data-quality.md"),
         "dimension_profiles": {},
+        "available_models": available_models,
     }
 
 
