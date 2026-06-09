@@ -1,29 +1,64 @@
 # Review Consistency Skill
 
 ## Purpose
-Step-by-step instructions for cross-file consistency review on PRs.
+
+Guide an agent through cross-file consistency validation for a domain, typically as part of a PR review.
 
 ## When to Use
-- PR review automation
-- Manual consistency check before merging domain changes
+
+- User says "review this PR", "check consistency", or "validate {domain}"
+- Before merging any change to `domains/**`
+- After bootstrap or manual edits to domain files
 
 ## Steps
 
-1. **Identify changed files** in the PR
-2. **Load all domain files** for affected domain(s)
-3. **Run cross-file checks:**
-   - Folder name matches `domain` field in all YAML files
-   - Metric names are unique within domain
-   - Dimension names are unique within domain
-   - No alias collides with another metric/dimension/term name
-   - `depends_on` references resolve to existing metrics, dimensions, or terms
-   - `sensitivity` references resolve to declared classifications
-   - `related_metrics` and `related_dimensions` in glossary resolve
-   - `profile_dimensions` in scan-config match `enumerate: true` dimensions
-   - `last_reviewed` is not in the future
-4. **Report findings** as PR review comments
-5. **Block merge** if any critical consistency violation found
+### 1. Run schema + consistency validation
+
+```bash
+canon validate --domain {slug}
+```
+
+This runs both JSON schema validation and cross-file consistency checks.
+
+### 2. Run detailed consistency review
+
+```bash
+canon review-consistency --domain {slug}
+```
+
+This checks:
+- All `depends_on` entries resolve to dimensions in `ontology.yaml`
+- All metric aliases are unique within the domain
+- All `governed_sources` of type `semantic_model` have a non-empty `measure` field
+- All glossary `related_metrics` resolve to metric names in `metrics.yaml`
+- All glossary `related_dimensions` resolve to dimension names in `ontology.yaml`
+- `profile_dimensions` in `scan-config.yaml` match `enumerate: true` dimensions
+
+### 3. Interpret findings
+
+Each finding is a human-readable string explaining the broken reference.
+
+Common fixes:
+- **Unresolved depends_on** → typo in dimension name, or dimension missing from `ontology.yaml`
+- **Alias collision** → two metrics share the same alias; rename one
+- **Empty governed_sources.measure** → fill in the platform measure name
+- **Broken glossary reference** → metric or dimension was renamed; update the glossary entry
+
+### 4. Fix and re-validate
+
+After fixing, re-run:
+
+```bash
+canon validate --domain {slug}
+```
+
+Zero findings = safe to merge.
+
+## Automation
+
+The `review.yml` workflow runs this automatically on PRs touching `domains/**`, `shared/**`, or `scan-config.yaml`. It blocks merge on any critical violation.
 
 ## Output
-- PR review with inline comments on violations
-- Pass/fail status check
+
+- Pass/fail with human-readable findings
+- In CI: status check on the PR
