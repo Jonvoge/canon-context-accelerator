@@ -204,7 +204,7 @@ async def run_http_server(repo_root: Path | None = None, port: int = 8001) -> No
     from starlette.routing import Mount, Route
     from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 
-    from serving.auth import AuthConfig, create_asgi_auth_middleware, resource_metadata_route, authorization_server_metadata_route
+    from serving.auth import AuthConfig, create_asgi_auth_middleware, resource_metadata_route, authorization_server_metadata_route, token_proxy_route
 
     auth_config = AuthConfig(
         tenant_id=os.environ.get("CANON_AUTH_TENANT_ID", ""),
@@ -228,6 +228,7 @@ async def run_http_server(repo_root: Path | None = None, port: int = 8001) -> No
         Route("/healthz", healthz, methods=["GET"]),
         Route("/.well-known/oauth-protected-resource", resource_metadata_route(auth_config), methods=["GET"]),
         Route("/.well-known/oauth-authorization-server", authorization_server_metadata_route(auth_config), methods=["GET"]),
+        Route("/oauth/token", token_proxy_route(auth_config), methods=["POST"]),
         Mount("/mcp", app=mcp_asgi),
     ]
 

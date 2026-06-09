@@ -97,16 +97,15 @@ def resource_metadata_route(config: AuthConfig) -> Callable:
 def authorization_server_metadata_route(config: AuthConfig) -> Callable:
     """Returns a Starlette endpoint that serves RFC 8414 Authorization Server Metadata.
 
-    Points clients to Entra's authorize/token endpoints directly.
-    This is needed because Entra doesn't serve RFC 8414 metadata itself,
-    so we act as the metadata provider while Entra remains the actual auth server.
+    Points authorization_endpoint to Entra (user login) but token_endpoint to ourselves
+    so we can proxy the token exchange with the correct client_secret encoding.
     """
     async def endpoint(request: Request) -> JSONResponse:
         entra = f"https://login.microsoftonline.com/{config.tenant_id}/oauth2/v2.0"
         return JSONResponse({
             "issuer": f"https://login.microsoftonline.com/{config.tenant_id}/v2.0",
             "authorization_endpoint": f"{entra}/authorize",
-            "token_endpoint": f"{entra}/token",
+            "token_endpoint": f"{config.base_url}/oauth/token",
             "registration_endpoint": None,
             "scopes_supported": [
                 f"api://{config.client_id}/access",
@@ -117,6 +116,39 @@ def authorization_server_metadata_route(config: AuthConfig) -> Callable:
             "grant_types_supported": ["authorization_code", "refresh_token"],
             "code_challenge_methods_supported": ["S256"],
         })
+    return endpoint
+
+
+def token_proxy_route(config: AuthConfig) -> Callable:
+    """Proxies token requests to Entra, injecting the correct client_secret server-side.
+
+    This avoids issues with HTTP libraries that percent-encode ~ in form bodies,
+    which Entra rejects.
+    """
+    async def endpoint(request: Request) -> Response:
+        body = await request.body()
+        # Parse the form body from the client
+        from urllib.parse import parse_qs, urlencode
+        params = parse_qs(body.decode("utf-8"), keep_blank_values=True)
+        # Flatten single-value lists
+        flat: dict[str, str] = {k: v[0] for k, v in params.items()}
+        # Inject our client_secret (overrides whatever the client sent)
+        flat["client_id"] = config.client_id
+        flat["client_secret"] = config.client_secret
+
+        entra_url = f"https://login.microsoftonline.com/{config.tenant_id}/oauth2/v2.0/token"
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                entra_url,
+                content=urlencode(flat, safe="~"),
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                timeout=30,
+            )
+        return Response(
+            content=resp.content,
+            status_code=resp.status_code,
+            headers={"content-type": resp.headers.get("content-type", "application/json")},
+        )
     return endpoint
 
 
