@@ -83,7 +83,7 @@ connectors:
     auth_secret_name: CANON_FABRIC_CLIENT_SECRET
     options:
       workspace_id: "b53e615a-ab79-49f9-bcf0-67250a34f633"   # TODO: your workspace GUID
-      dataset_id: ""  # TODO: fill with actual dataset GUID from Power BI service URL (app.powerbi.com/groups/<workspace_id>/datasets/<dataset_id>)
+      dataset_id: "6eed1bc2-c159-4428-9cf8-6bb1d4e2d6c5"  # TODO: fill with actual dataset GUID from Power BI service URL (app.powerbi.com/groups/<workspace_id>/datasets/<dataset_id>)
       dataset_name: "RetailSemanticModel"                      # TODO: your semantic model name
 
   - id: retail-sql               # slug — referenced by domains.warehouse_connector
