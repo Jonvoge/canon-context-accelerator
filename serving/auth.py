@@ -73,7 +73,7 @@ async def validate_token(token: str, config: AuthConfig) -> dict | None:
             token,
             key,
             algorithms=["RS256"],
-            audience=f"api://{config.client_id}",
+            audience=[config.client_id, f"api://{config.client_id}"],
             issuer=f"https://login.microsoftonline.com/{config.tenant_id}/v2.0",
         )
         return claims
