@@ -31,7 +31,7 @@ async def test_fetch_file_github(github_config):
 
 
 @pytest.mark.asyncio
-async def test_cache_returns_cached_on_same_sha(github_config):
+async def test_cache_hit_within_ttl(github_config):
     call_count = 0
 
     async def mock_get(url, **kwargs):
@@ -46,4 +46,4 @@ async def test_cache_returns_cached_on_same_sha(github_config):
         client = RepoClient(github_config, cache_ttl_seconds=60)
         await client.fetch_file("domains/retail/metrics.yaml")
         await client.fetch_file("domains/retail/metrics.yaml")
-        assert call_count >= 1
+        assert call_count == 1
