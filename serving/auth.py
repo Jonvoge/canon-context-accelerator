@@ -79,6 +79,11 @@ async def validate_token(token: str, config: AuthConfig) -> dict | None:
         return claims
     except (jwt.PyJWTError, httpx.HTTPError, Exception) as e:
         logger.warning("Token validation failed: %s", e)
+        try:
+            unverified = jwt.decode(token, options={"verify_signature": False, "verify_aud": False, "verify_iss": False, "verify_exp": False})
+            logger.warning("Token aud=%s iss=%s", unverified.get("aud"), unverified.get("iss"))
+        except Exception:
+            pass
         return None
 
 
