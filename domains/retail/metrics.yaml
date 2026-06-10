@@ -57,14 +57,46 @@ metrics:
       3. Never query Finance Reporting.
 
     usage_patterns:
-      - question: Revenue by category for a given period
+      - pattern_id: total-revenue-scalar
+        question: Total revenue for a given period
+        source: semantic_model
+        dax: |
+          EVALUATE
+          ROW(
+            "Total Revenue", CALCULATE([Total Revenue], dim_date[Date] >= DATE({START_YEAR},{START_MONTH},{START_DAY}) && dim_date[Date] <= DATE({END_YEAR},{END_MONTH},{END_DAY}))
+          )
+      - pattern_id: total-revenue-by-category
+        question: Revenue by category for a given period
         source: warehouse
+        dax: |
+          EVALUATE
+          CALCULATETABLE(
+            SUMMARIZECOLUMNS(
+              dim_product[category],
+              "Total Revenue", [Total Revenue]
+            ),
+            dim_date[Date] >= DATE({START_YEAR},{START_MONTH},{START_DAY}) && dim_date[Date] <= DATE({END_YEAR},{END_MONTH},{END_DAY})
+          )
+          ORDER BY [Total Revenue] DESC
         sql: |
           SELECT p.category, SUM(s.quantity * s.unit_price) AS revenue
           FROM dbo.sales s
           JOIN dbo.products p ON s.product_id = p.product_id
           WHERE s.status='Completed' AND s.order_date BETWEEN '{START}' AND '{END}'
           GROUP BY p.category ORDER BY revenue DESC
+      - pattern_id: total-revenue-by-region
+        question: Revenue by region for a given period
+        source: semantic_model
+        dax: |
+          EVALUATE
+          CALCULATETABLE(
+            SUMMARIZECOLUMNS(
+              dim_geography[region],
+              "Total Revenue", [Total Revenue]
+            ),
+            dim_date[Date] >= DATE({START_YEAR},{START_MONTH},{START_DAY}) && dim_date[Date] <= DATE({END_YEAR},{END_MONTH},{END_DAY})
+          )
+          ORDER BY [Total Revenue] DESC
 
     depends_on:
       - Product Category
@@ -102,6 +134,29 @@ metrics:
       Query primary (RetailSemanticModel) for gross revenue questions.
       Do not substitute for Total Revenue — these differ by discount and bundle exclusions.
 
+    usage_patterns:
+      - pattern_id: total-gross-revenue-scalar
+        question: Total gross revenue for a given period
+        source: semantic_model
+        dax: |
+          EVALUATE
+          ROW(
+            "Total Gross Revenue", CALCULATE([Total Gross Revenue], dim_date[Date] >= DATE({START_YEAR},{START_MONTH},{START_DAY}) && dim_date[Date] <= DATE({END_YEAR},{END_MONTH},{END_DAY}))
+          )
+      - pattern_id: total-gross-revenue-by-category
+        question: Gross revenue by product category
+        source: semantic_model
+        dax: |
+          EVALUATE
+          CALCULATETABLE(
+            SUMMARIZECOLUMNS(
+              dim_product[category],
+              "Total Gross Revenue", [Total Gross Revenue]
+            ),
+            dim_date[Date] >= DATE({START_YEAR},{START_MONTH},{START_DAY}) && dim_date[Date] <= DATE({END_YEAR},{END_MONTH},{END_DAY})
+          )
+          ORDER BY [Total Gross Revenue] DESC
+
     depends_on: []
     sensitivity: internal
 
@@ -136,6 +191,29 @@ metrics:
     routing: >
       Query primary (RetailSemanticModel) for cost analysis.
 
+    usage_patterns:
+      - pattern_id: total-cogs-scalar
+        question: Total COGS for a given period
+        source: semantic_model
+        dax: |
+          EVALUATE
+          ROW(
+            "Total COGS", CALCULATE([Total COGS], dim_date[Date] >= DATE({START_YEAR},{START_MONTH},{START_DAY}) && dim_date[Date] <= DATE({END_YEAR},{END_MONTH},{END_DAY}))
+          )
+      - pattern_id: total-cogs-by-category
+        question: COGS by product category
+        source: semantic_model
+        dax: |
+          EVALUATE
+          CALCULATETABLE(
+            SUMMARIZECOLUMNS(
+              dim_product[category],
+              "Total COGS", [Total COGS]
+            ),
+            dim_date[Date] >= DATE({START_YEAR},{START_MONTH},{START_DAY}) && dim_date[Date] <= DATE({END_YEAR},{END_MONTH},{END_DAY})
+          )
+          ORDER BY [Total COGS] DESC
+
     depends_on: []
     sensitivity: internal
 
@@ -169,6 +247,29 @@ metrics:
 
     routing: >
       Query primary (RetailSemanticModel) for profit analysis.
+
+    usage_patterns:
+      - pattern_id: gross-profit-scalar
+        question: Gross profit for a given period
+        source: semantic_model
+        dax: |
+          EVALUATE
+          ROW(
+            "Gross Profit", CALCULATE([Gross Profit], dim_date[Date] >= DATE({START_YEAR},{START_MONTH},{START_DAY}) && dim_date[Date] <= DATE({END_YEAR},{END_MONTH},{END_DAY}))
+          )
+      - pattern_id: gross-profit-by-category
+        question: Gross profit by product category
+        source: semantic_model
+        dax: |
+          EVALUATE
+          CALCULATETABLE(
+            SUMMARIZECOLUMNS(
+              dim_product[category],
+              "Gross Profit", [Gross Profit]
+            ),
+            dim_date[Date] >= DATE({START_YEAR},{START_MONTH},{START_DAY}) && dim_date[Date] <= DATE({END_YEAR},{END_MONTH},{END_DAY})
+          )
+          ORDER BY [Gross Profit] DESC
 
     depends_on:
       - Total Revenue
@@ -208,6 +309,29 @@ metrics:
       Query primary (RetailSemanticModel). Do not compute manually from warehouse columns
       without matching the same revenue exclusions.
 
+    usage_patterns:
+      - pattern_id: gross-margin-scalar
+        question: Gross margin percentage for a given period
+        source: semantic_model
+        dax: |
+          EVALUATE
+          ROW(
+            "Gross Margin %", CALCULATE([Gross Margin %], dim_date[Date] >= DATE({START_YEAR},{START_MONTH},{START_DAY}) && dim_date[Date] <= DATE({END_YEAR},{END_MONTH},{END_DAY}))
+          )
+      - pattern_id: gross-margin-by-category
+        question: Gross margin percentage by product category
+        source: semantic_model
+        dax: |
+          EVALUATE
+          CALCULATETABLE(
+            SUMMARIZECOLUMNS(
+              dim_product[category],
+              "Gross Margin %", [Gross Margin %]
+            ),
+            dim_date[Date] >= DATE({START_YEAR},{START_MONTH},{START_DAY}) && dim_date[Date] <= DATE({END_YEAR},{END_MONTH},{END_DAY})
+          )
+          ORDER BY [Gross Margin %] DESC
+
     depends_on:
       - Gross Profit
       - Total Revenue
@@ -244,6 +368,29 @@ metrics:
     routing: >
       Query primary (RetailSemanticModel) for discount analysis.
 
+    usage_patterns:
+      - pattern_id: total-discount-scalar
+        question: Total discount amount for a given period
+        source: semantic_model
+        dax: |
+          EVALUATE
+          ROW(
+            "Total Discount", CALCULATE([Total Discount], dim_date[Date] >= DATE({START_YEAR},{START_MONTH},{START_DAY}) && dim_date[Date] <= DATE({END_YEAR},{END_MONTH},{END_DAY}))
+          )
+      - pattern_id: total-discount-by-category
+        question: Discounts by product category
+        source: semantic_model
+        dax: |
+          EVALUATE
+          CALCULATETABLE(
+            SUMMARIZECOLUMNS(
+              dim_product[category],
+              "Total Discount", [Total Discount]
+            ),
+            dim_date[Date] >= DATE({START_YEAR},{START_MONTH},{START_DAY}) && dim_date[Date] <= DATE({END_YEAR},{END_MONTH},{END_DAY})
+          )
+          ORDER BY [Total Discount] DESC
+
     depends_on: []
     sensitivity: internal
 
@@ -276,6 +423,29 @@ metrics:
 
     routing: >
       Query primary (RetailSemanticModel).
+
+    usage_patterns:
+      - pattern_id: discount-pct-scalar
+        question: Discount percentage for a given period
+        source: semantic_model
+        dax: |
+          EVALUATE
+          ROW(
+            "Discount %", CALCULATE([Discount %], dim_date[Date] >= DATE({START_YEAR},{START_MONTH},{START_DAY}) && dim_date[Date] <= DATE({END_YEAR},{END_MONTH},{END_DAY}))
+          )
+      - pattern_id: discount-pct-by-category
+        question: Discount percentage by product category
+        source: semantic_model
+        dax: |
+          EVALUATE
+          CALCULATETABLE(
+            SUMMARIZECOLUMNS(
+              dim_product[category],
+              "Discount %", [Discount %]
+            ),
+            dim_date[Date] >= DATE({START_YEAR},{START_MONTH},{START_DAY}) && dim_date[Date] <= DATE({END_YEAR},{END_MONTH},{END_DAY})
+          )
+          ORDER BY [Discount %] DESC
 
     depends_on:
       - Total Discount
@@ -312,6 +482,29 @@ metrics:
     routing: >
       Query primary (RetailSemanticModel) for order volume questions.
 
+    usage_patterns:
+      - pattern_id: total-orders-scalar
+        question: Total order count for a given period
+        source: semantic_model
+        dax: |
+          EVALUATE
+          ROW(
+            "Total Orders", CALCULATE([Total Orders], dim_date[Date] >= DATE({START_YEAR},{START_MONTH},{START_DAY}) && dim_date[Date] <= DATE({END_YEAR},{END_MONTH},{END_DAY}))
+          )
+      - pattern_id: total-orders-by-region
+        question: Order count by region
+        source: semantic_model
+        dax: |
+          EVALUATE
+          CALCULATETABLE(
+            SUMMARIZECOLUMNS(
+              dim_geography[region],
+              "Total Orders", [Total Orders]
+            ),
+            dim_date[Date] >= DATE({START_YEAR},{START_MONTH},{START_DAY}) && dim_date[Date] <= DATE({END_YEAR},{END_MONTH},{END_DAY})
+          )
+          ORDER BY [Total Orders] DESC
+
     depends_on: []
     sensitivity: internal
 
@@ -344,6 +537,29 @@ metrics:
 
     routing: >
       Query primary (RetailSemanticModel) for unit volume questions.
+
+    usage_patterns:
+      - pattern_id: total-quantity-scalar
+        question: Total quantity sold for a given period
+        source: semantic_model
+        dax: |
+          EVALUATE
+          ROW(
+            "Total Quantity", CALCULATE([Total Quantity], dim_date[Date] >= DATE({START_YEAR},{START_MONTH},{START_DAY}) && dim_date[Date] <= DATE({END_YEAR},{END_MONTH},{END_DAY}))
+          )
+      - pattern_id: total-quantity-by-category
+        question: Units sold by product category
+        source: semantic_model
+        dax: |
+          EVALUATE
+          CALCULATETABLE(
+            SUMMARIZECOLUMNS(
+              dim_product[category],
+              "Total Quantity", [Total Quantity]
+            ),
+            dim_date[Date] >= DATE({START_YEAR},{START_MONTH},{START_DAY}) && dim_date[Date] <= DATE({END_YEAR},{END_MONTH},{END_DAY})
+          )
+          ORDER BY [Total Quantity] DESC
 
     depends_on: []
     sensitivity: internal
@@ -378,6 +594,29 @@ metrics:
 
     routing: >
       Query primary (RetailSemanticModel) for basket analysis.
+
+    usage_patterns:
+      - pattern_id: avg-order-value-scalar
+        question: Average order value for a given period
+        source: semantic_model
+        dax: |
+          EVALUATE
+          ROW(
+            "Avg Order Value", CALCULATE([Avg Order Value], dim_date[Date] >= DATE({START_YEAR},{START_MONTH},{START_DAY}) && dim_date[Date] <= DATE({END_YEAR},{END_MONTH},{END_DAY}))
+          )
+      - pattern_id: avg-order-value-by-region
+        question: Average order value by region
+        source: semantic_model
+        dax: |
+          EVALUATE
+          CALCULATETABLE(
+            SUMMARIZECOLUMNS(
+              dim_geography[region],
+              "Avg Order Value", [Avg Order Value]
+            ),
+            dim_date[Date] >= DATE({START_YEAR},{START_MONTH},{START_DAY}) && dim_date[Date] <= DATE({END_YEAR},{END_MONTH},{END_DAY})
+          )
+          ORDER BY [Avg Order Value] DESC
 
     depends_on:
       - Total Revenue
@@ -415,6 +654,29 @@ metrics:
     routing: >
       Query primary (RetailSemanticModel) for price analysis.
 
+    usage_patterns:
+      - pattern_id: avg-unit-price-scalar
+        question: Average unit price for a given period
+        source: semantic_model
+        dax: |
+          EVALUATE
+          ROW(
+            "Avg Unit Price", CALCULATE([Avg Unit Price], dim_date[Date] >= DATE({START_YEAR},{START_MONTH},{START_DAY}) && dim_date[Date] <= DATE({END_YEAR},{END_MONTH},{END_DAY}))
+          )
+      - pattern_id: avg-unit-price-by-category
+        question: Average unit price by product category
+        source: semantic_model
+        dax: |
+          EVALUATE
+          CALCULATETABLE(
+            SUMMARIZECOLUMNS(
+              dim_product[category],
+              "Avg Unit Price", [Avg Unit Price]
+            ),
+            dim_date[Date] >= DATE({START_YEAR},{START_MONTH},{START_DAY}) && dim_date[Date] <= DATE({END_YEAR},{END_MONTH},{END_DAY})
+          )
+          ORDER BY [Avg Unit Price] DESC
+
     depends_on:
       - Total Revenue
       - Total Quantity
@@ -451,6 +713,29 @@ metrics:
     routing: >
       Query primary (RetailSemanticModel) for customer volume questions.
 
+    usage_patterns:
+      - pattern_id: customer-count-scalar
+        question: Number of unique customers for a given period
+        source: semantic_model
+        dax: |
+          EVALUATE
+          ROW(
+            "Customer Count", CALCULATE([Customer Count], dim_date[Date] >= DATE({START_YEAR},{START_MONTH},{START_DAY}) && dim_date[Date] <= DATE({END_YEAR},{END_MONTH},{END_DAY}))
+          )
+      - pattern_id: customer-count-by-region
+        question: Customer count by region
+        source: semantic_model
+        dax: |
+          EVALUATE
+          CALCULATETABLE(
+            SUMMARIZECOLUMNS(
+              dim_geography[region],
+              "Customer Count", [Customer Count]
+            ),
+            dim_date[Date] >= DATE({START_YEAR},{START_MONTH},{START_DAY}) && dim_date[Date] <= DATE({END_YEAR},{END_MONTH},{END_DAY})
+          )
+          ORDER BY [Customer Count] DESC
+
     depends_on: []
     sensitivity: internal
 
@@ -485,6 +770,16 @@ metrics:
     routing: >
       Query primary (RetailSemanticModel). Requires a date filter in context to resolve
       the prior year period correctly.
+
+    usage_patterns:
+      - pattern_id: revenue-py-scalar
+        question: Prior year revenue for a given period
+        source: semantic_model
+        dax: |
+          EVALUATE
+          ROW(
+            "Revenue PY", CALCULATE([Revenue PY], dim_date[Date] >= DATE({START_YEAR},{START_MONTH},{START_DAY}) && dim_date[Date] <= DATE({END_YEAR},{END_MONTH},{END_DAY}))
+          )
 
     depends_on:
       - Total Revenue
@@ -522,6 +817,16 @@ metrics:
     routing: >
       Query primary (RetailSemanticModel). Always requires a date context.
 
+    usage_patterns:
+      - pattern_id: revenue-ytd-scalar
+        question: Year-to-date revenue through a given date
+        source: semantic_model
+        dax: |
+          EVALUATE
+          ROW(
+            "Revenue YTD", CALCULATE([Revenue YTD], dim_date[Date] <= DATE({END_YEAR},{END_MONTH},{END_DAY}))
+          )
+
     depends_on:
       - Total Revenue
     sensitivity: internal
@@ -558,6 +863,16 @@ metrics:
     routing: >
       Query primary (RetailSemanticModel). Requires a date filter. Do not compute manually
       without matching the same revenue exclusions as Total Revenue.
+
+    usage_patterns:
+      - pattern_id: revenue-yoy-scalar
+        question: Year-over-year revenue growth percentage
+        source: semantic_model
+        dax: |
+          EVALUATE
+          ROW(
+            "Revenue YoY %", CALCULATE([Revenue YoY %], dim_date[Date] >= DATE({START_YEAR},{START_MONTH},{START_DAY}) && dim_date[Date] <= DATE({END_YEAR},{END_MONTH},{END_DAY}))
+          )
 
     depends_on:
       - Total Revenue

@@ -1,5 +1,10 @@
-# Canon cache (machine-owned, never on main)
-.canon-cache/
+# Canon cache (machine-owned)
+# Allow only the two files the deployed MCP needs; ignore everything else
+.canon-cache/**
+!.canon-cache/**/.gitignore
+!.canon-cache/*/
+!.canon-cache/**/schema.json
+!.canon-cache/**/profiles.json
 
 # Python
 __pycache__/

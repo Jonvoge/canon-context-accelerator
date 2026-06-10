@@ -1,24 +1,36 @@
 {
   "tables": [
     {
-      "name": "dim_customer",
-      "columns": []
-    },
-    {
-      "name": "dim_date",
-      "columns": []
-    },
-    {
-      "name": "dim_geography",
-      "columns": []
+      "name": "fact_sales",
+      "columns": [
+        "order_status",
+        "product_id"
+      ]
     },
     {
       "name": "dim_product",
-      "columns": []
+      "columns": [
+        "category"
+      ]
     },
     {
-      "name": "fact_sales",
-      "columns": []
+      "name": "dim_geography",
+      "columns": [
+        "region"
+      ]
+    },
+    {
+      "name": "dim_customer",
+      "columns": [
+        "customer_id",
+        "segment"
+      ]
+    },
+    {
+      "name": "dim_date",
+      "columns": [
+        "date_key"
+      ]
     }
   ],
   "measures": [
@@ -32,10 +44,10 @@
     "Total Orders",
     "Total Quantity",
     "Avg Order Value",
-    "Revenue YoY %",
+    "Avg Unit Price",
+    "Customer Count",
     "Revenue PY",
     "Revenue YTD",
-    "Avg Unit Price",
-    "Customer Count"
+    "Revenue YoY %"
   ]
 }

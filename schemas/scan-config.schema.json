@@ -55,6 +55,29 @@
         "timezone": { "$ref": "#/$defs/nonEmptyString" }
       }
     },
+    "fabricSemanticOptions": {
+      "type": "object",
+      "additionalProperties": { "type": ["string", "number", "boolean"] },
+      "required": ["workspace_id"],
+      "properties": {
+        "workspace_id": { "$ref": "#/$defs/nonEmptyString" },
+        "dataset_id": { "type": "string" },
+        "dataset_name": { "type": "string" }
+      },
+      "anyOf": [
+        { "properties": { "dataset_id": { "minLength": 1 } }, "required": ["dataset_id"] },
+        { "properties": { "dataset_name": { "minLength": 1 } }, "required": ["dataset_name"] }
+      ]
+    },
+    "fabricSqlOptions": {
+      "type": "object",
+      "additionalProperties": { "type": ["string", "number", "boolean"] },
+      "required": ["server", "database"],
+      "properties": {
+        "server": { "$ref": "#/$defs/nonEmptyString" },
+        "database": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    },
     "connector": {
       "type": "object",
       "additionalProperties": false,
@@ -70,6 +93,12 @@
           },
           "default": {}
         }
+      },
+      "if": { "properties": { "type": { "const": "fabric_semantic" } }, "required": ["type"] },
+      "then": { "properties": { "options": { "$ref": "#/$defs/fabricSemanticOptions" } }, "required": ["options"] },
+      "else": {
+        "if": { "properties": { "type": { "const": "fabric_sql" } }, "required": ["type"] },
+        "then": { "properties": { "options": { "$ref": "#/$defs/fabricSqlOptions" } }, "required": ["options"] }
       }
     },
     "escalation": {

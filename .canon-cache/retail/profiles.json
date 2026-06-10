@@ -1,25 +1,10 @@
 {
   "Product Category": {
-    "values": [
-      "Books",
-      "Clothing",
-      "Electronics",
-      "Home & Garden",
-      "Spooooorts"
-    ],
-    "profiled_at": "2026-06-09T19:52:20.711809+00:00"
+    "values": [],
+    "profiled_at": "2026-06-10T18:05:06.021035+00:00"
   },
   "Store Region": {
-    "values": [
-      "Bavaria",
-      "East",
-      "England",
-      "Ile-de-France",
-      "Midwest",
-      "Northeast",
-      "South",
-      "West"
-    ],
-    "profiled_at": "2026-06-09T19:52:20.711809+00:00"
+    "values": [],
+    "profiled_at": "2026-06-10T18:05:06.021035+00:00"
   }
 }

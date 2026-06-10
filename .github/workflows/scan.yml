@@ -53,6 +53,14 @@ jobs:
               --create-issues --github-repo "$REPO" --github-token "$GITHUB_TOKEN"
           fi
 
+      - name: Commit scan cache to repo
+        run: |
+          git config user.name "canon-bot"
+          git config user.email "canon-bot@users.noreply.github.com"
+          git add .canon-cache/
+          git diff --cached --quiet || git commit -m "chore(cache): update scan cache [skip ci]"
+          git push
+
       - name: Upload scan cache
         uses: actions/upload-artifact@v4
         with:

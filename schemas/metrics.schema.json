@@ -131,8 +131,9 @@
       "additionalProperties": false,
       "required": ["question", "source"],
       "properties": {
+        "pattern_id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
         "question": { "$ref": "#/$defs/nonEmptyString" },
-        "source": { "type": "string", "enum": ["primary", "warehouse", "also_exists_in"] },
+        "source": { "type": "string", "enum": ["primary", "warehouse", "also_exists_in", "semantic_model"] },
         "sql": { "$ref": "#/$defs/nonEmptyString" },
         "dax": { "$ref": "#/$defs/nonEmptyString" },
         "notes": { "$ref": "#/$defs/nonEmptyString" }

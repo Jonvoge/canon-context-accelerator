@@ -235,10 +235,100 @@ async def _list_domains_remote(repo_client) -> list[dict]:
     return result
 
 
+# ── Scoped context helpers ────────────────────────────────────────────────────
+
+def _scope_metric_context(full_ctx: dict, metric_name: str) -> dict:
+    """Return a focused context slice for a single metric."""
+    metrics_data = full_ctx.get("metrics") or {}
+    all_metrics = metrics_data.get("metrics", []) if metrics_data else []
+    metric_entry = next(
+        (m for m in all_metrics if m.get("name", "").lower() == metric_name.lower()), None
+    )
+    if metric_entry is None:
+        return {"error": f"Metric '{metric_name}' not found in domain context."}
+
+    # Include related glossary terms (match on metric name / depends_on names)
+    glossary_data = full_ctx.get("glossary") or {}
+    all_terms = glossary_data.get("terms", []) if glossary_data else []
+    related_names = {metric_entry["name"].lower()} | {d.lower() for d in metric_entry.get("depends_on", [])}
+    glossary_terms = [
+        t for t in all_terms
+        if t.get("term", "").lower() in related_names
+    ]
+
+    # Include domain rules (full text — agent needs them for filter context)
+    domain_rules = full_ctx.get("domain_rules")
+
+    # Extract schema tables referenced by this metric's governed sources
+    model_schema = full_ctx.get("model_schema")
+    execution = {
+        "available_models": full_ctx.get("available_models", []),
+    }
+
+    return {
+        "domain": full_ctx.get("domain"),
+        "metric": metric_entry,
+        "glossary_terms": glossary_terms,
+        "domain_rules": domain_rules,
+        "model_schema": model_schema,
+        "execution": execution,
+    }
+
+
+def _resolve_metric(full_ctx: dict, question: str) -> list[dict]:
+    """Match a question against metric names and aliases. Returns top 3 by score."""
+    metrics_data = full_ctx.get("metrics") or {}
+    all_metrics = metrics_data.get("metrics", []) if metrics_data else []
+
+    q_tokens = set(question.lower().split())
+
+    scored = []
+    for m in all_metrics:
+        name = m.get("name", "")
+        candidates = [name.lower()] + [a.lower() for a in m.get("aliases", [])]
+        score = 0
+        for candidate in candidates:
+            c_tokens = set(candidate.split())
+            overlap = len(q_tokens & c_tokens)
+            if overlap:
+                # Exact full match scores highest
+                if candidate in question.lower():
+                    score = max(score, 100 + overlap)
+                else:
+                    score = max(score, overlap * 10)
+        if score > 0:
+            scored.append({"metric": name, "confidence": score})
+
+    scored.sort(key=lambda x: x["confidence"], reverse=True)
+    top = scored[:3]
+
+    # Normalise confidence to 0-1
+    if top:
+        max_score = top[0]["confidence"]
+        for item in top:
+            item["confidence"] = round(item["confidence"] / max_score, 2)
+
+    return top
+
+
 # ── MCP server factory ────────────────────────────────────────────────────────
 
 def create_app(repo_root: Path, repo_client=None) -> Server:
-    app = Server("canon-mcp")
+    app = Server(
+        "canon-mcp",
+        instructions=(
+            "You are connected to CanonMCP — the governed context layer for business metrics. "
+            "Protocol: "
+            "1) Call list_domains to see available domains. "
+            "2) Call get_domain_context(domain) before any data query — this returns metrics definitions, "
+            "ontology, domain rules, model_schema (tables/measures for DAX), and available_models "
+            "(connector ids for FabricProxy execute_query). "
+            "3) Use FabricProxy execute_query(domain, model, dax) for governed data retrieval, "
+            "where model is the connector id from available_models. "
+            "Do not fall back to other Fabric tools for governed domains — "
+            "Canon definitions take precedence over any other source."
+        ),
+    )
     cache = _DomainCache()
 
     @app.list_tools()
@@ -260,7 +350,8 @@ def create_app(repo_root: Path, repo_client=None) -> Server:
                     "data quality notes, sensitivity guidance, dimension value profiles, "
                     "available_models (connector ids for FabricProxy execute_query), "
                     "and model_schema (table/column/measure names from the last scan — use these "
-                    "when writing DAX queries). Call this before any FabricProxy execute_query call."
+                    "when writing DAX queries). Call this before any FabricProxy execute_query call. "
+                    "For single-metric questions, use get_metric_context instead to reduce context size."
                 ),
                 inputSchema={
                     "type": "object",
@@ -271,6 +362,52 @@ def create_app(repo_root: Path, repo_client=None) -> Server:
                         }
                     },
                     "required": ["domain"],
+                },
+            ),
+            Tool(
+                name="get_metric_context",
+                description=(
+                    "Get scoped context for a single metric — metric definition, governed sources, "
+                    "applicable domain rules, related glossary terms, available_models, and relevant "
+                    "schema tables. Much smaller than get_domain_context. "
+                    "Preferred for single-metric questions. Use resolve first if you are unsure of the metric name."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "domain": {
+                            "type": "string",
+                            "description": "Domain slug, e.g. 'retail'.",
+                        },
+                        "metric": {
+                            "type": "string",
+                            "description": "Metric name exactly as defined in Canon, e.g. 'Total Revenue'.",
+                        },
+                    },
+                    "required": ["domain", "metric"],
+                },
+            ),
+            Tool(
+                name="resolve",
+                description=(
+                    "Match a natural language question to the most relevant Canon metric(s). "
+                    "Returns up to 3 candidates with confidence scores. "
+                    "Call this first when the user asks a data question, then call get_metric_context "
+                    "on the top match before executing."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "domain": {
+                            "type": "string",
+                            "description": "Domain slug, e.g. 'retail'.",
+                        },
+                        "question": {
+                            "type": "string",
+                            "description": "The user's natural language question.",
+                        },
+                    },
+                    "required": ["domain", "question"],
                 },
             ),
         ]
@@ -293,6 +430,30 @@ def create_app(repo_root: Path, repo_client=None) -> Server:
             else:
                 ctx = cache.get(domain, repo_root)
             return [TextContent(type="text", text=json.dumps(ctx, indent=2, default=str))]
+
+        elif name == "get_metric_context":
+            domain = arguments.get("domain", "")
+            metric = arguments.get("metric", "")
+            if not domain or not metric:
+                return [TextContent(type="text", text='{"error": "domain and metric are required"}')]
+            if repo_client is not None:
+                ctx = await _assemble_domain_remote(domain, repo_client)
+            else:
+                ctx = cache.get(domain, repo_root)
+            result = _scope_metric_context(ctx, metric)
+            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+
+        elif name == "resolve":
+            domain = arguments.get("domain", "")
+            question = arguments.get("question", "")
+            if not domain or not question:
+                return [TextContent(type="text", text='{"error": "domain and question are required"}')]
+            if repo_client is not None:
+                ctx = await _assemble_domain_remote(domain, repo_client)
+            else:
+                ctx = cache.get(domain, repo_root)
+            matches = _resolve_metric(ctx, question)
+            return [TextContent(type="text", text=json.dumps({"domain": domain, "question": question, "matches": matches}, indent=2))]
 
         return [TextContent(type="text", text=json.dumps({"error": f"Unknown tool: {name}"}))]
 

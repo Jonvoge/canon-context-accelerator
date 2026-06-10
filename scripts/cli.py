@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 import click
+import yaml
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -202,6 +203,33 @@ def bootstrap(domain: str, config: str, repo_root: str | None, no_pr: bool, dry_
 
     if report.pr_url:
         click.echo(f"\nPR: {report.pr_url}")
+
+
+@main.command("export")
+@click.option("--domain", required=True, help="Domain slug to export")
+@click.option("--format", "fmt", default="osi", show_default=True,
+              type=click.Choice(["osi"]), help="Export format")
+@click.option("--out", default=None, type=click.Path(), help="Output file path (default: stdout)")
+@click.option("--repo-root", default=None, type=click.Path())
+def export(domain: str, fmt: str, out: str | None, repo_root: str | None):
+    """Export domain definitions to a standard interchange format (OSI)."""
+    root = Path(repo_root) if repo_root else _REPO_ROOT
+
+    if fmt == "osi":
+        from scripts.export_osi import export_domain
+        data = export_domain(domain, root)
+        output = yaml.dump(data, allow_unicode=True, sort_keys=False, default_flow_style=False)
+    else:
+        click.echo(f"Unknown format: {fmt}", err=True)
+        sys.exit(1)
+
+    if out:
+        Path(out).write_text(output, encoding="utf-8")
+        click.echo(click.style(f"✓ Exported {domain} ({fmt}) → {out}", fg="green"))
+        click.echo("Note: OSI export is lossy by design — governance metadata is in custom_extensions.")
+        click.echo("DAX is not an OSI dialect. ANSI_SQL from warehouse usage_patterns is used instead.")
+    else:
+        click.echo(output)
 
 
 if __name__ == "__main__":
