@@ -1,0 +1,8 @@
+# This directory is machine-owned cache. Never hand-edit files here.
+# schema.json and profiles.json are committed to repo so the deployed MCP can read them.
+# Everything else stays local only.
+*
+!.gitignore
+!*/
+!*/schema.json
+!*/profiles.json

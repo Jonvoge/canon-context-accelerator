@@ -1,0 +1,41 @@
+{
+  "tables": [
+    {
+      "name": "dim_customer",
+      "columns": []
+    },
+    {
+      "name": "dim_date",
+      "columns": []
+    },
+    {
+      "name": "dim_geography",
+      "columns": []
+    },
+    {
+      "name": "dim_product",
+      "columns": []
+    },
+    {
+      "name": "fact_sales",
+      "columns": []
+    }
+  ],
+  "measures": [
+    "Total Revenue",
+    "Total Gross Revenue",
+    "Total COGS",
+    "Gross Profit",
+    "Gross Margin %",
+    "Total Discount",
+    "Discount %",
+    "Total Orders",
+    "Total Quantity",
+    "Avg Order Value",
+    "Revenue YoY %",
+    "Revenue PY",
+    "Revenue YTD",
+    "Avg Unit Price",
+    "Customer Count"
+  ]
+}
