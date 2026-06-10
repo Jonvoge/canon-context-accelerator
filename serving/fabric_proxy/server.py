@@ -15,6 +15,7 @@ from mcp.types import TextContent, Tool
 logger = logging.getLogger(__name__)
 
 _EXECUTE_QUERIES_URL = "https://api.powerbi.com/v1.0/myorg/groups/{workspace_id}/datasets/{dataset_id}/executeQueries"
+_DATASETS_URL = "https://api.powerbi.com/v1.0/myorg/groups/{workspace_id}/datasets"
 _POWER_BI_SCOPE = "https://analysis.windows.net/powerbi/api/.default"
 
 
@@ -27,34 +28,63 @@ def _load_scan_config(repo_root: Path | None = None) -> dict:
 
 
 def _resolve_connector(scan_config: dict, domain: str, model: str) -> dict[str, str]:
+    """Return workspace_id, dataset_id (may be empty), and dataset_name from scan-config."""
     domains = scan_config.get("domains", [])
     domain_cfg = next((d for d in domains if d.get("name") == domain), None)
     if domain_cfg is None:
-        raise ValueError(f"Domain '{domain}' not found")
+        raise ValueError(f"Domain '{domain}' not found in scan-config.yaml")
 
     domain_connector = domain_cfg.get("semantic_connector")
     if model != domain_connector:
         raise ValueError(
             f"Connector '{model}' is not the semantic connector for domain '{domain}'. "
-            f"Expected '{domain_connector}'."
+            f"Expected '{domain_connector}'. Use available_models from CanonMCP get_domain_context."
         )
 
     connectors = scan_config.get("connectors", [])
     connector = next((c for c in connectors if c.get("id") == model), None)
     if connector is None:
-        raise ValueError(f"Connector '{model}' not found")
+        raise ValueError(f"Connector '{model}' not found in scan-config.yaml")
 
     if connector.get("type") != "fabric_semantic":
         raise ValueError(f"Connector '{model}' is not of type fabric_semantic")
 
     options = connector.get("options", {})
-    workspace_id = options.get("workspace_id")
-    dataset_id = options.get("dataset_id")
+    workspace_id = options.get("workspace_id", "")
+    dataset_id = options.get("dataset_id", "")
+    dataset_name = options.get("dataset_name", "")
 
-    if not workspace_id or not dataset_id:
-        raise ValueError(f"Connector '{model}' missing workspace_id or dataset_id")
+    if not workspace_id:
+        raise ValueError(
+            f"Connector '{model}' missing workspace_id. "
+            f"Fill options.workspace_id in scan-config.yaml and redeploy."
+        )
+    if not dataset_id and not dataset_name:
+        raise ValueError(
+            f"Connector '{model}' missing both dataset_id and dataset_name. "
+            f"Fill options.dataset_id (or dataset_name) in scan-config.yaml and redeploy."
+        )
 
-    return {"workspace_id": workspace_id, "dataset_id": dataset_id}
+    return {"workspace_id": workspace_id, "dataset_id": dataset_id, "dataset_name": dataset_name}
+
+
+async def _resolve_dataset_id_async(workspace_id: str, dataset_name: str, pbi_token: str) -> str:
+    """Look up a dataset GUID by name via the Power BI REST API."""
+    url = _DATASETS_URL.format(workspace_id=workspace_id)
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(url, headers={"Authorization": f"Bearer {pbi_token}"}, timeout=30)
+    if resp.status_code != 200:
+        raise ValueError(
+            f"Could not list datasets in workspace '{workspace_id}': HTTP {resp.status_code}. "
+            f"Alternatively, set options.dataset_id in scan-config.yaml to avoid this lookup."
+        )
+    for ds in resp.json().get("value", []):
+        if ds.get("name") == dataset_name:
+            return ds["id"]
+    raise ValueError(
+        f"Dataset '{dataset_name}' not found in workspace '{workspace_id}'. "
+        f"Verify dataset_name in scan-config.yaml or set options.dataset_id directly."
+    )
 
 
 async def _acquire_obo_token(user_token: str) -> str:
@@ -118,6 +148,8 @@ def create_app(scan_config: dict | None = None, repo_root: Path | None = None) -
                 name="execute_query",
                 description=(
                     "Execute a DAX query against a Fabric semantic model. "
+                    "Call CanonMCP get_domain_context first — the response includes available_models "
+                    "(use one as 'model') and model_schema (table/column names for writing DAX). "
                     "Returns rows from the first result table."
                 ),
                 inputSchema={
@@ -125,11 +157,11 @@ def create_app(scan_config: dict | None = None, repo_root: Path | None = None) -
                     "properties": {
                         "domain": {
                             "type": "string",
-                            "description": "Domain slug, e.g. 'retail'.",
+                            "description": "Domain slug from CanonMCP, e.g. 'retail'.",
                         },
                         "model": {
                             "type": "string",
-                            "description": "Connector id of the semantic model, e.g. 'retail-semantic'.",
+                            "description": "Connector id from CanonMCP available_models, e.g. 'retail-semantic'.",
                         },
                         "dax": {
                             "type": "string",
@@ -157,7 +189,7 @@ def create_app(scan_config: dict | None = None, repo_root: Path | None = None) -
             return [TextContent(type="text", text=json.dumps({"error": "DAX query must start with EVALUATE"}))]
 
         try:
-            ids = _resolve_connector(scan_config, domain, model)
+            connector_info = _resolve_connector(scan_config, domain, model)
         except ValueError as e:
             return [TextContent(type="text", text=json.dumps({"error": str(e)}))]
 
@@ -171,9 +203,18 @@ def create_app(scan_config: dict | None = None, repo_root: Path | None = None) -
         except PermissionError as e:
             return [TextContent(type="text", text=json.dumps({"error": str(e)}))]
 
+        dataset_id = connector_info["dataset_id"]
+        if not dataset_id:
+            try:
+                dataset_id = await _resolve_dataset_id_async(
+                    connector_info["workspace_id"], connector_info["dataset_name"], obo_token
+                )
+            except ValueError as e:
+                return [TextContent(type="text", text=json.dumps({"error": str(e)}))]
+
         try:
             result = await _call_fabric_execute_queries(
-                ids["workspace_id"], ids["dataset_id"], dax, obo_token
+                connector_info["workspace_id"], dataset_id, dax, obo_token
             )
         except PermissionError as e:
             return [TextContent(type="text", text=json.dumps({"error": str(e)}))]

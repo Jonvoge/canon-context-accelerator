@@ -43,8 +43,8 @@ def _domain_fingerprint(domain_path: Path, cache_dir: Path) -> str:
     for fname in ("metrics.yaml", "ontology.yaml", "glossary.yaml", "sensitivity.yaml",
                   "domain-rules.md", "data-quality.md"):
         parts.append(_file_fingerprint(domain_path / fname))
-    # Include profiles from cache
     parts.append(_file_fingerprint(cache_dir / "profiles.json"))
+    parts.append(_file_fingerprint(cache_dir / "schema.json"))
     return hashlib.sha256(":".join(parts).encode()).hexdigest()[:16]
 
 
@@ -78,11 +78,19 @@ def _assemble_domain(domain: str, repo_root: Path) -> dict[str, Any]:
     }
 
     # Include dimension profiles if available
-    profiles_path = repo_root / ".canon-cache" / domain / "profiles.json"
+    cache_dir = repo_root / ".canon-cache" / domain
+    profiles_path = cache_dir / "profiles.json"
     if profiles_path.exists():
         ctx["dimension_profiles"] = json.loads(profiles_path.read_text(encoding="utf-8"))
     else:
         ctx["dimension_profiles"] = {}
+
+    # Include semantic model schema (tables/columns/measures) from last scan
+    schema_path = cache_dir / "schema.json"
+    if schema_path.exists():
+        ctx["model_schema"] = json.loads(schema_path.read_text(encoding="utf-8"))
+    else:
+        ctx["model_schema"] = None
 
     # Resolve available_models from scan-config.yaml
     scan_cfg_path = repo_root / "scan-config.yaml"
@@ -196,6 +204,9 @@ async def _assemble_domain_remote(domain: str, repo_client) -> dict:
     else:
         available_models = []
 
+    schema_raw = await repo_client.fetch_file_or_none(f".canon-cache/{domain}/schema.json")
+    model_schema = json.loads(schema_raw) if schema_raw else None
+
     return {
         "domain": domain,
         "metrics": await fetch_yaml("metrics.yaml"),
@@ -205,6 +216,7 @@ async def _assemble_domain_remote(domain: str, repo_client) -> dict:
         "domain_rules": await fetch_md("domain-rules.md"),
         "data_quality": await fetch_md("data-quality.md"),
         "dimension_profiles": {},
+        "model_schema": model_schema,
         "available_models": available_models,
     }
 
@@ -243,9 +255,12 @@ def create_app(repo_root: Path, repo_client=None) -> Server:
             Tool(
                 name="get_domain_context",
                 description=(
-                    "Get the full assembled context for a Canon domain. Returns metrics definitions, "
+                    "Get the full assembled context for a Canon domain. Returns: metrics definitions, "
                     "ontology (dimensions + enumerated values), glossary terms, domain routing rules, "
-                    "data quality notes, sensitivity guidance, and latest dimension value profiles."
+                    "data quality notes, sensitivity guidance, dimension value profiles, "
+                    "available_models (connector ids for FabricProxy execute_query), "
+                    "and model_schema (table/column/measure names from the last scan — use these "
+                    "when writing DAX queries). Call this before any FabricProxy execute_query call."
                 ),
                 inputSchema={
                     "type": "object",

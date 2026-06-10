@@ -235,6 +235,17 @@ def run_scan(
 
     cache_dir = repo_root / ".canon-cache" / domain
     cache_dir.mkdir(parents=True, exist_ok=True)
+
+    # Write semantic model schema for CanonMCP context enrichment
+    schema = {
+        "tables": [
+            {"name": t.name, "columns": [c.name for c in t.columns]}
+            for t in snapshot.tables
+        ],
+        "measures": [m.name for m in snapshot.measures],
+    }
+    (cache_dir / "schema.json").write_text(json.dumps(schema, indent=2), encoding="utf-8")
+
     profiles_path = cache_dir / "profiles.json"
 
     old_profiles: dict[str, list] = {}
