@@ -131,6 +131,11 @@ Only new platform measures are added to the draft.
 
 ---
 
+
+> Runtime note: anything a serving path reads must be readable from git at runtime; the image carries code, not content.
+
+Sensitivity note: `_enforce_sensitivity` is advisory redaction, not a security boundary. Real protection comes from OBO identity plus platform RLS/OLS.
+
 ## Schema Validation
 
 All YAML files validate against JSON Schema definitions in `schemas/`. Editors with YAML language

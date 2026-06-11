@@ -1,7 +1,7 @@
 """Canon domain initializer — scaffolds new domains from template."""
 
-from pathlib import Path
 import shutil
+from pathlib import Path
 
 
 def init_domain(domain_slug: str, repo_root: Path | None = None) -> Path:

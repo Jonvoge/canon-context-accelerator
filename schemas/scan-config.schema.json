@@ -9,30 +9,13 @@
     "schema_version": { "type": "string", "const": "1.0" },
     "scanner": { "$ref": "#/$defs/scanner" },
     "schedules": { "$ref": "#/$defs/schedules" },
-    "connectors": {
-      "type": "array",
-      "items": { "$ref": "#/$defs/connector" },
-      "minItems": 1
-    },
-    "domains": {
-      "type": "array",
-      "items": { "$ref": "#/$defs/domainConfig" },
-      "minItems": 1
-    }
+    "connectors": { "type": "array", "items": { "$ref": "#/$defs/connector" }, "minItems": 1 },
+    "domains": { "type": "array", "items": { "$ref": "#/$defs/domainConfig" }, "minItems": 1 }
   },
   "$defs": {
-    "slug": {
-      "type": "string",
-      "pattern": "^[a-z][a-z0-9-]*$"
-    },
-    "nonEmptyString": {
-      "type": "string",
-      "minLength": 1
-    },
-    "connectorType": {
-      "type": "string",
-      "enum": ["fabric_semantic", "fabric_sql", "snowflake", "databricks"]
-    },
+    "slug": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+    "nonEmptyString": { "type": "string", "minLength": 1 },
+    "connectorType": { "type": "string", "enum": ["fabric_semantic", "fabric_sql", "snowflake", "databricks"] },
     "scanner": {
       "type": "object",
       "additionalProperties": false,
@@ -86,13 +69,7 @@
         "id": { "$ref": "#/$defs/slug" },
         "type": { "$ref": "#/$defs/connectorType" },
         "auth_secret_name": { "$ref": "#/$defs/nonEmptyString" },
-        "options": {
-          "type": "object",
-          "additionalProperties": {
-            "type": ["string", "number", "boolean"]
-          },
-          "default": {}
-        }
+        "options": { "type": "object", "additionalProperties": { "type": ["string", "number", "boolean"] }, "default": {} }
       },
       "if": { "properties": { "type": { "const": "fabric_semantic" } }, "required": ["type"] },
       "then": { "properties": { "options": { "$ref": "#/$defs/fabricSemanticOptions" } }, "required": ["options"] },
@@ -111,40 +88,32 @@
         "low_priority_auto_close_days": { "type": "integer", "minimum": 1 }
       }
     },
+    "domainModel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["connector", "role"],
+      "properties": {
+        "connector": { "$ref": "#/$defs/slug" },
+        "role": { "type": "string", "enum": ["semantic", "warehouse"] },
+        "primary": { "type": "boolean", "default": false },
+        "description": { "type": "string" }
+      }
+    },
     "domainConfig": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "name",
-        "path",
-        "owners",
-        "profile_dimensions",
-        "issue_labels"
-      ],
+      "required": ["name", "path", "owners", "profile_dimensions", "issue_labels"],
       "properties": {
         "name": { "$ref": "#/$defs/slug" },
         "path": { "$ref": "#/$defs/nonEmptyString" },
-        "owners": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/nonEmptyString" },
-          "minItems": 1,
-          "uniqueItems": true
-        },
+        "owners": { "type": "array", "items": { "$ref": "#/$defs/nonEmptyString" }, "minItems": 1, "uniqueItems": true },
+        "models": { "type": "array", "items": { "$ref": "#/$defs/domainModel" }, "minItems": 1 },
         "semantic_connector": { "$ref": "#/$defs/slug" },
         "warehouse_connector": { "$ref": "#/$defs/slug" },
-        "profile_dimensions": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/nonEmptyString" },
-          "uniqueItems": true,
-          "default": []
-        },
-        "issue_labels": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/nonEmptyString" },
-          "minItems": 1,
-          "uniqueItems": true
-        },
+        "profile_dimensions": { "type": "array", "items": { "$ref": "#/$defs/nonEmptyString" }, "uniqueItems": true, "default": [] },
+        "issue_labels": { "type": "array", "items": { "$ref": "#/$defs/nonEmptyString" }, "minItems": 1, "uniqueItems": true },
         "digest_target": { "$ref": "#/$defs/nonEmptyString" },
+        "sql_row_cap": { "type": "integer", "minimum": 1 },
         "escalation": { "$ref": "#/$defs/escalation" }
       }
     }

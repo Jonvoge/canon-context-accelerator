@@ -1,0 +1,46 @@
+{
+  "domains": [
+    {
+      "name": "retail",
+      "description": "- Covers all retail sales, product, and store metrics for the Danish retail operation",
+      "metric_count": 15,
+      "dimension_count": 4,
+      "trigger_aliases": [
+        "revenue",
+        "sales",
+        "turnover",
+        "top line",
+        "how much did we sell",
+        "gross revenue",
+        "gross sales",
+        "gross top line",
+        "COGS",
+        "cost of goods",
+        "cost of goods sold",
+        "gross profit",
+        "profit",
+        "margin in DKK",
+        "gross margin",
+        "margin percent",
+        "margin %",
+        "GM%",
+        "discounts",
+        "total discounts"
+      ],
+      "models": [
+        {
+          "id": "retail-semantic",
+          "role": "semantic",
+          "primary": true,
+          "description": "Retail Planning semantic model \u2014 daily grain, completed orders only, governed measures. Use for KPI/aggregate questions.\n"
+        },
+        {
+          "id": "retail-sql",
+          "role": "warehouse",
+          "primary": false,
+          "description": "retail_lakehouse SQL endpoint \u2014 row-level detail, joins, exports. Use when the semantic model lacks the columns needed.\n"
+        }
+      ]
+    }
+  ]
+}

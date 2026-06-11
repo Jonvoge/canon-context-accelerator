@@ -14,7 +14,7 @@ import json
 import logging
 import os
 import textwrap
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import anthropic
@@ -27,14 +27,14 @@ _MODEL = "claude-haiku-4-5"
 _QUESTIONS = [
     "How would you define this measure in plain business language?",
     "Are there exclusions, filters, or edge cases built in that users might not know about?",
-    "Which source should agents use — the semantic model (RetailSemanticModel) or Fabric SQL endpoint?",
+    "Which source should agents use — the semantic model or Fabric SQL endpoint?",
     "What common aliases or names do people use for this in reports or conversations?",
     "Anything else agents should know about when NOT to use this measure?",
 ]
 
 
 def _draft_metric(client: anthropic.Anthropic, name: str, domain: str, transcript: list[dict]) -> dict:
-    today = datetime.now(timezone.utc).date().isoformat()
+    today = datetime.now(UTC).date().isoformat()
     qa_text = "\n".join(f"Q: {qa['q']}\nA: {qa['a']}" for qa in transcript)
     prompt = textwrap.dedent(f"""
         Draft a Canon metric definition from this Q&A interview.
@@ -60,7 +60,9 @@ def _draft_metric(client: anthropic.Anthropic, name: str, domain: str, transcrip
         }}
     """).strip()
     response = client.messages.create(
-        model=_MODEL, max_tokens=700, temperature=0.0,
+        model=_MODEL,
+        max_tokens=700,
+        temperature=0.0,
         messages=[{"role": "user", "content": prompt}],
     )
     raw = response.content[0].text.strip().strip("```").strip()
@@ -87,18 +89,13 @@ def start_interview(domain: str, owner_email: str = "", repo_root: Path | None =
         raise FileNotFoundError(f"metrics.yaml not found at {metrics_path}")
 
     data = yaml.safe_load(metrics_path.read_text(encoding="utf-8")) or {}
-    existing_names = {m["name"] for m in data.get("metrics", [])}
-
     # Determine undocumented measures from scan cache
     scan_path = repo_root / ".canon-cache" / domain / "scan.json"
     undocumented: list[str] = []
 
     if scan_path.exists():
         scan_data = json.loads(scan_path.read_text(encoding="utf-8"))
-        undocumented = [
-            f["subject"] for f in scan_data.get("findings", [])
-            if f.get("type") == "undocumented_measure"
-        ]
+        undocumented = [f["subject"] for f in scan_data.get("findings", []) if f.get("type") == "undocumented_measure"]
 
     if not undocumented:
         print(f"No undocumented measures found in scan cache for domain '{domain}'.")
@@ -137,22 +134,28 @@ def start_interview(domain: str, owner_email: str = "", repo_root: Path | None =
         except Exception as e:
             print(f"  LLM error: {e}. Writing stub.")
             entry = {
-                "name": measure, "domain": domain,
+                "name": measure,
+                "domain": domain,
                 "owner": f"{domain.title()} Analytics Team",
-                "last_reviewed": datetime.now(timezone.utc).date().isoformat(),
-                "status": "active", "aliases": [],
+                "last_reviewed": datetime.now(UTC).date().isoformat(),
+                "status": "active",
+                "aliases": [],
                 "definition": "# TODO: add definition",
                 "governed_sources": {
                     "primary": {
-                        "platform": "fabric", "type": "semantic_model",
+                        "platform": "fabric",
+                        "type": "semantic_model",
                         "workspace": "Fabric Demos: Retail Planning",
-                        "model": "RetailSemanticModel", "measure": measure,
+                        "model": "RetailSemanticModel",
+                        "measure": measure,
                     }
                 },
-                "routing": "# TODO: add routing", "depends_on": [], "sensitivity": "internal",
+                "routing": "# TODO: add routing",
+                "depends_on": [],
+                "sensitivity": "internal",
             }
 
-        print(f"\nDraft:\n  definition: {str(entry.get('definition',''))[:200]}")
+        print(f"\nDraft:\n  definition: {str(entry.get('definition', ''))[:200]}")
         confirm = input("Keep? [Y/n]: ").strip().lower()
         if confirm in ("n", "no"):
             print("  Skipped.")
@@ -170,4 +173,3 @@ def start_interview(domain: str, owner_email: str = "", repo_root: Path | None =
         print(f"\n✓ Added {len(new_entries)} definition(s) to {metrics_path}")
     else:
         print("\nNo new definitions written.")
-

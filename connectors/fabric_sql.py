@@ -8,8 +8,8 @@ Dimension profiling: SELECT DISTINCT
 
 from __future__ import annotations
 
-import struct
 import logging
+import struct
 from typing import Any
 
 import pyodbc
@@ -67,13 +67,7 @@ class FabricSqlConnector(BaseConnector):
         token_bytes = _get_token_bytes(token)
         server = self.config["server"]
         database = self.config["database"]
-        conn_str = (
-            f"Driver={_DRIVER};"
-            f"Server={server};"
-            f"Database={database};"
-            "Encrypt=yes;"
-            "TrustServerCertificate=no;"
-        )
+        conn_str = f"Driver={_DRIVER};Server={server};Database={database};Encrypt=yes;TrustServerCertificate=no;"
         conn = pyodbc.connect(conn_str, attrs_before={1256: token_bytes})
         return conn
 
@@ -127,10 +121,12 @@ class FabricSqlConnector(BaseConnector):
             tables = []
             for schema, tname, ttype in table_rows:
                 key = f"{schema}.{tname}"
-                tables.append(TableMetadata(
-                    name=f"{schema}.{tname}",
-                    columns=table_col_map.get(key, []),
-                ))
+                tables.append(
+                    TableMetadata(
+                        name=f"{schema}.{tname}",
+                        columns=table_col_map.get(key, []),
+                    )
+                )
 
             return MetadataSnapshot(tables=tables)
         finally:

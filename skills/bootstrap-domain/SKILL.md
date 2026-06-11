@@ -31,7 +31,7 @@ Creates `domains/{slug}/` from `_template` with all 6 files, plus `bootstrap-doc
 Add an entry under `domains:`:
 
 ```yaml
-  - slug: {slug}
+  - name: {slug}
     semantic_connector: {connector-id}    # must match a connectors[].id
     warehouse_connector: {connector-id}   # optional
     owners: ["@github-handle"]

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import contextvars
 import logging
-from dataclasses import dataclass, field
-from typing import Callable
+from collections.abc import Callable
+from dataclasses import dataclass
 
 import httpx
 import jwt
@@ -77,10 +77,13 @@ async def validate_token(token: str, config: AuthConfig) -> dict | None:
             issuer=f"https://login.microsoftonline.com/{config.tenant_id}/v2.0",
         )
         return claims
-    except (jwt.PyJWTError, httpx.HTTPError, Exception) as e:
+    except Exception as e:
         logger.warning("Token validation failed: %s", e)
         try:
-            unverified = jwt.decode(token, options={"verify_signature": False, "verify_aud": False, "verify_iss": False, "verify_exp": False})
+            unverified = jwt.decode(
+                token,
+                options={"verify_signature": False, "verify_aud": False, "verify_iss": False, "verify_exp": False},
+            )
             logger.warning("Token aud=%s iss=%s", unverified.get("aud"), unverified.get("iss"))
         except Exception:
             pass
@@ -89,13 +92,17 @@ async def validate_token(token: str, config: AuthConfig) -> dict | None:
 
 def resource_metadata_route(config: AuthConfig) -> Callable:
     """Returns a Starlette endpoint that serves RFC 9728 Protected Resource Metadata."""
+
     async def endpoint(request: Request) -> JSONResponse:
-        return JSONResponse({
-            "resource": config.base_url,
-            "authorization_servers": [config.base_url],
-            "scopes_supported": [f"api://{config.client_id}/access"],
-            "bearer_methods_supported": ["header"],
-        })
+        return JSONResponse(
+            {
+                "resource": config.base_url,
+                "authorization_servers": [config.base_url],
+                "scopes_supported": [f"api://{config.client_id}/access"],
+                "bearer_methods_supported": ["header"],
+            }
+        )
+
     return endpoint
 
 
@@ -105,33 +112,40 @@ def authorization_server_metadata_route(config: AuthConfig) -> Callable:
     issuer and all endpoints point to ourselves — claude.ai ignores external endpoints
     and always constructs /authorize and /token relative to the MCP server host.
     """
+
     async def endpoint(request: Request) -> JSONResponse:
-        return JSONResponse({
-            "issuer": config.base_url,
-            "authorization_endpoint": f"{config.base_url}/authorize",
-            "token_endpoint": f"{config.base_url}/token",
-            "scopes_supported": [
-                f"api://{config.client_id}/access",
-                "openid",
-                "offline_access",
-            ],
-            "response_types_supported": ["code"],
-            "grant_types_supported": ["authorization_code", "refresh_token"],
-            "code_challenge_methods_supported": ["S256"],
-        })
+        return JSONResponse(
+            {
+                "issuer": config.base_url,
+                "authorization_endpoint": f"{config.base_url}/authorize",
+                "token_endpoint": f"{config.base_url}/token",
+                "scopes_supported": [
+                    f"api://{config.client_id}/access",
+                    "openid",
+                    "offline_access",
+                ],
+                "response_types_supported": ["code"],
+                "grant_types_supported": ["authorization_code", "refresh_token"],
+                "code_challenge_methods_supported": ["S256"],
+            }
+        )
+
     return endpoint
 
 
 def authorization_proxy_route(config: AuthConfig) -> Callable:
     """Redirects Claude's /authorize request to Entra, passing all query params through."""
+
     async def endpoint(request: Request) -> Response:
         from urllib.parse import urlencode
+
         entra_url = f"https://login.microsoftonline.com/{config.tenant_id}/oauth2/v2.0/authorize"
         params = dict(request.query_params)
         params.pop("resource", None)  # Entra v2.0 uses scope, not resource
         params["client_id"] = config.client_id
         redirect_to = f"{entra_url}?{urlencode(params)}"
         return Response(status_code=302, headers={"location": redirect_to})
+
     return endpoint
 
 
@@ -141,9 +155,11 @@ def token_proxy_route(config: AuthConfig) -> Callable:
     claude.ai ignores token_endpoint in metadata and always POSTs to /token on the MCP
     server host, so this is mounted at both /token and /oauth/token.
     """
+
     async def endpoint(request: Request) -> Response:
         body = await request.body()
         from urllib.parse import parse_qs, urlencode
+
         params = parse_qs(body.decode("utf-8"), keep_blank_values=True)
         flat: dict[str, str] = {k: v[0] for k, v in params.items()}
         flat.pop("resource", None)  # Entra v2.0 uses scope, not resource
@@ -163,11 +179,13 @@ def token_proxy_route(config: AuthConfig) -> Callable:
             status_code=resp.status_code,
             headers={"content-type": resp.headers.get("content-type", "application/json")},
         )
+
     return endpoint
 
 
 def create_auth_middleware(config: AuthConfig) -> Callable:
     """Returns a decorator that wraps a Starlette endpoint with JWT validation."""
+
     def decorator(handler: Callable) -> Callable:
         async def wrapped(request: Request) -> Response:
             if not config.required:
@@ -202,12 +220,15 @@ def create_auth_middleware(config: AuthConfig) -> Callable:
             request.state.user_claims = claims
             request.state.user_token = token
             return await handler(request)
+
         return wrapped
+
     return decorator
 
 
 def create_asgi_auth_middleware(config: AuthConfig):
     """Wraps an ASGI app with JWT auth. For wrapping raw ASGI callables like the MCP session manager."""
+
     def middleware(asgi_app):
         async def wrapped_asgi(scope, receive, send):
             if scope["type"] not in ("http", "websocket"):
@@ -254,6 +275,7 @@ def create_asgi_auth_middleware(config: AuthConfig):
                 _user_claims_var.reset(claims_token)
 
         return wrapped_asgi
+
     return middleware
 
 
@@ -262,16 +284,20 @@ async def _send_401(scope, send, config: AuthConfig, error: str | None):
     www_auth = f'Bearer resource_metadata="{config.base_url}/.well-known/oauth-protected-resource"'
     if error:
         www_auth += f', error="{error}"'
-    await send({
-        "type": "http.response.start",
-        "status": 401,
-        "headers": [
-            (b"www-authenticate", www_auth.encode()),
-            (b"content-type", b"application/json"),
-        ],
-    })
-    await send({
-        "type": "http.response.body",
-        "body": b'{"error": "unauthorized"}',
-        "more_body": False,
-    })
+    await send(
+        {
+            "type": "http.response.start",
+            "status": 401,
+            "headers": [
+                (b"www-authenticate", www_auth.encode()),
+                (b"content-type", b"application/json"),
+            ],
+        }
+    )
+    await send(
+        {
+            "type": "http.response.body",
+            "body": b'{"error": "unauthorized"}',
+            "more_body": False,
+        }
+    )

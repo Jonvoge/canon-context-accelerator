@@ -33,10 +33,21 @@ def retail_domain_path(repo_root: Path) -> Path:
 def canned_snapshot() -> MetadataSnapshot:
     """A minimal MetadataSnapshot that matches the retail example domain's 15 measures."""
     _all_measures = [
-        "Total Revenue", "Total Gross Revenue", "Total COGS", "Gross Profit",
-        "Gross Margin %", "Total Discount", "Discount %", "Total Orders",
-        "Total Quantity", "Avg Order Value", "Avg Unit Price", "Customer Count",
-        "Revenue PY", "Revenue YTD", "Revenue YoY %",
+        "Total Revenue",
+        "Total Gross Revenue",
+        "Total COGS",
+        "Gross Profit",
+        "Gross Margin %",
+        "Total Discount",
+        "Discount %",
+        "Total Orders",
+        "Total Quantity",
+        "Avg Order Value",
+        "Avg Unit Price",
+        "Customer Count",
+        "Revenue PY",
+        "Revenue YTD",
+        "Revenue YoY %",
     ]
     return MetadataSnapshot(
         tables=[
@@ -67,10 +78,7 @@ def canned_snapshot() -> MetadataSnapshot:
                 columns=[ColumnMetadata(name="date_key", table="dim_date")],
             ),
         ],
-        measures=[
-            MeasureMetadata(name=name, table="fact_sales", expression=f"[{name}]")
-            for name in _all_measures
-        ],
+        measures=[MeasureMetadata(name=name, table="fact_sales", expression=f"[{name}]") for name in _all_measures],
         relationships=[
             RelationshipMetadata(
                 from_table="fact_sales",

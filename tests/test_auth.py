@@ -1,11 +1,11 @@
-from unittest.mock import patch, AsyncMock
+from unittest.mock import patch
 
 import httpx
 import pytest
-from starlette.testclient import TestClient
 from starlette.applications import Starlette
 from starlette.responses import JSONResponse
 from starlette.routing import Route
+from starlette.testclient import TestClient
 
 from serving.auth import AuthConfig, create_auth_middleware, resource_metadata_route, validate_token
 
@@ -20,9 +20,11 @@ def auth_config():
 
 
 def test_resource_metadata_endpoint(auth_config):
-    app = Starlette(routes=[
-        Route("/.well-known/oauth-protected-resource", resource_metadata_route(auth_config), methods=["GET"]),
-    ])
+    app = Starlette(
+        routes=[
+            Route("/.well-known/oauth-protected-resource", resource_metadata_route(auth_config), methods=["GET"]),
+        ]
+    )
     client = TestClient(app)
     resp = client.get("/.well-known/oauth-protected-resource")
     assert resp.status_code == 200
@@ -36,10 +38,12 @@ def test_unauthenticated_request_returns_401(auth_config):
     async def dummy(request):
         return JSONResponse({"ok": True})
 
-    app = Starlette(routes=[
-        Route("/.well-known/oauth-protected-resource", resource_metadata_route(auth_config), methods=["GET"]),
-        Route("/mcp", create_auth_middleware(auth_config)(dummy), methods=["POST"]),
-    ])
+    app = Starlette(
+        routes=[
+            Route("/.well-known/oauth-protected-resource", resource_metadata_route(auth_config), methods=["GET"]),
+            Route("/mcp", create_auth_middleware(auth_config)(dummy), methods=["POST"]),
+        ]
+    )
     client = TestClient(app)
     resp = client.post("/mcp", json={})
     assert resp.status_code == 401
@@ -60,9 +64,11 @@ def test_required_false_bypasses_auth():
         assert request.state.user_claims is None
         return JSONResponse({"ok": True})
 
-    app = Starlette(routes=[
-        Route("/mcp", create_auth_middleware(config)(dummy), methods=["POST"]),
-    ])
+    app = Starlette(
+        routes=[
+            Route("/mcp", create_auth_middleware(config)(dummy), methods=["POST"]),
+        ]
+    )
     client = TestClient(app)
     resp = client.post("/mcp", json={})
     assert resp.status_code == 200
@@ -77,6 +83,7 @@ async def test_validate_token_returns_none_on_network_error():
         base_url="https://example.com",
     )
     from serving.auth import _JWKS_CACHE
+
     _JWKS_CACHE.clear()
 
     with patch("serving.auth._get_jwks", side_effect=httpx.ConnectError("network down")):

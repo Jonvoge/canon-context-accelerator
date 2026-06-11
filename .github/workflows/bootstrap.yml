@@ -22,29 +22,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-
       - name: Install uv
         uses: astral-sh/setup-uv@v4
         with:
           version: "latest"
-
       - name: Set up Python
         run: uv python install 3.12
-
       - name: Install dependencies
         run: uv sync --frozen
-
       - name: Run bootstrap
         env:
           CANON_FABRIC_CLIENT_SECRET: ${{ secrets.CANON_FABRIC_CLIENT_SECRET }}
           CANON_FABRIC_TENANT_ID: ${{ secrets.CANON_FABRIC_TENANT_ID }}
           CANON_FABRIC_CLIENT_ID: ${{ secrets.CANON_FABRIC_CLIENT_ID }}
-          CANON_FABRIC_WORKSPACE_ID: ${{ secrets.CANON_FABRIC_WORKSPACE_ID }}
-          CANON_FABRIC_DATASET_NAME: ${{ vars.CANON_FABRIC_DATASET_NAME }}
-          CANON_SQL_SERVER: ${{ secrets.CANON_SQL_SERVER }}
-          CANON_SQL_DATABASE: ${{ secrets.CANON_SQL_DATABASE }}
-          # ANTHROPIC_API_KEY is optional — if set, definitions are LLM-enriched.
-          # Without it, deterministic stubs are generated for human review.
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -55,7 +45,6 @@ jobs:
           fi
           echo "Bootstrapping domain: $DOMAIN"
           uv run canon bootstrap --domain "$DOMAIN" --config scan-config.yaml $FLAGS
-
       - name: Upload bootstrap report
         if: always()
         uses: actions/upload-artifact@v4
