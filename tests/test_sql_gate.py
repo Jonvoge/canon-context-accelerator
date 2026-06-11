@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -10,7 +10,6 @@ from serving.fabric_proxy.server import (
     _apply_sql_row_cap,
     _validate_sql_statement,
 )
-
 
 # ── _validate_sql_statement ───────────────────────────────────────────────────
 
