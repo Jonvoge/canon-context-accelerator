@@ -352,6 +352,15 @@ def _load_domain_metrics(domain: str, repo_root: Path | None = None) -> list[dic
     return data.get("metrics", [])
 
 
+def _get_discrepancy_notice(metric_entry: dict, dataset_name: str) -> str | None:
+    """Return a known_discrepancy notice if dataset_name matches an also_exists_in entry."""
+    also_in = metric_entry.get("governed_sources", {}).get("also_exists_in", [])
+    for alt in also_in:
+        if alt.get("model", "").lower() == dataset_name.lower() and alt.get("known_discrepancy"):
+            return alt["known_discrepancy"].strip()
+    return None
+
+
 def _find_pattern(
     metrics: list[dict], metric: str, group_by: str | None, connector_role: str | None = None
 ) -> tuple[dict, dict]:
@@ -364,17 +373,9 @@ def _find_pattern(
     patterns = metric_entry.get("usage_patterns", [])
     if connector_role == "warehouse":
         preferred = [pattern for pattern in patterns if pattern.get("sql")]
-        fallback_key = "sql"
     else:
         preferred = [pattern for pattern in patterns if pattern.get("dax")]
-        fallback_key = "dax"
 
-    if not preferred:
-        preferred = [pattern for pattern in patterns if pattern.get(fallback_key)]
-    if not preferred and connector_role == "warehouse":
-        preferred = [pattern for pattern in patterns if pattern.get("dax")]
-    if not preferred and connector_role == "semantic":
-        preferred = [pattern for pattern in patterns if pattern.get("sql")]
     if not preferred:
         raise ValueError(
             f"Metric '{metric}' has no compatible usage_patterns for role '{connector_role or 'semantic'}'."
@@ -639,6 +640,8 @@ def create_app(scan_config: dict, repo_root: Path | None = None) -> Server:
         except ValueError as exc:
             return [TextContent(type="text", text=json.dumps({"error": str(exc)}))]
 
+        discrepancy_notice = _get_discrepancy_notice(metric_entry, connector_info["dataset_name"])
+
         params: dict[str, str] = {}
         if period_start:
             params.update(_parse_iso_to_parts(period_start, "START"))
@@ -707,6 +710,8 @@ def create_app(scan_config: dict, repo_root: Path | None = None) -> Server:
             }
             if notices:
                 response["sensitivity_notices"] = notices
+            if discrepancy_notice:
+                response["discrepancy_notice"] = discrepancy_notice
             return [TextContent(type="text", text=json.dumps(response, indent=2, default=str))]
 
         try:
@@ -745,6 +750,8 @@ def create_app(scan_config: dict, repo_root: Path | None = None) -> Server:
         }
         if notices:
             response["sensitivity_notices"] = notices
+        if discrepancy_notice:
+            response["discrepancy_notice"] = discrepancy_notice
         return [TextContent(type="text", text=json.dumps(response, indent=2, default=str))]
 
     async def _handle_execute_query(arguments: dict) -> list[TextContent]:

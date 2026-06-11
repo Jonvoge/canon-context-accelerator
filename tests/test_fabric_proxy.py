@@ -352,3 +352,125 @@ def test_resolve_connector_allows_registered_warehouse_model():
     result = _resolve_connector(scan_config, domain="retail", model="retail-sql")
     assert result["connector_id"] == "retail-sql"
     assert result["role"] == "warehouse"
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# _find_pattern — cross-role fallback removed
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def _make_metric(name: str, patterns: list[dict]) -> dict:
+    return {"name": name, "usage_patterns": patterns}
+
+
+def test_find_pattern_warehouse_errors_when_no_sql_pattern():
+    """warehouse connector must not silently fall back to a DAX pattern."""
+    from serving.fabric_proxy.server import _find_pattern
+
+    metrics = [_make_metric("Revenue", [{"pattern_id": "p1", "dax": "EVALUATE ROW(...)"}])]
+    with pytest.raises(ValueError, match="no compatible usage_patterns"):
+        _find_pattern(metrics, "Revenue", None, connector_role="warehouse")
+
+
+def test_find_pattern_semantic_errors_when_no_dax_pattern():
+    """semantic connector must not silently fall back to a SQL pattern."""
+    from serving.fabric_proxy.server import _find_pattern
+
+    metrics = [_make_metric("Revenue", [{"pattern_id": "p1", "sql": "SELECT 1"}])]
+    with pytest.raises(ValueError, match="no compatible usage_patterns"):
+        _find_pattern(metrics, "Revenue", None, connector_role="semantic")
+
+
+def test_find_pattern_warehouse_selects_sql_pattern():
+    from serving.fabric_proxy.server import _find_pattern
+
+    metrics = [
+        _make_metric(
+            "Revenue",
+            [
+                {"pattern_id": "sql-p", "sql": "SELECT SUM(revenue) FROM sales"},
+                {"pattern_id": "dax-p", "dax": "EVALUATE ROW(...)"},
+            ],
+        )
+    ]
+    _, pattern = _find_pattern(metrics, "Revenue", None, connector_role="warehouse")
+    assert pattern["pattern_id"] == "sql-p"
+
+
+def test_find_pattern_semantic_selects_dax_pattern():
+    from serving.fabric_proxy.server import _find_pattern
+
+    metrics = [
+        _make_metric(
+            "Revenue",
+            [
+                {"pattern_id": "sql-p", "sql": "SELECT SUM(revenue) FROM sales"},
+                {"pattern_id": "dax-p", "dax": "EVALUATE ROW(...)"},
+            ],
+        )
+    ]
+    _, pattern = _find_pattern(metrics, "Revenue", None, connector_role="semantic")
+    assert pattern["pattern_id"] == "dax-p"
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# _get_discrepancy_notice
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def test_get_discrepancy_notice_matches_by_model_name():
+    from serving.fabric_proxy.server import _get_discrepancy_notice
+
+    metric_entry = {
+        "name": "Revenue",
+        "governed_sources": {
+            "also_exists_in": [
+                {"model": "Finance Reporting", "known_discrepancy": "Overstates 2-4%. JIRA-4521."},
+            ]
+        },
+    }
+    notice = _get_discrepancy_notice(metric_entry, "Finance Reporting")
+    assert notice == "Overstates 2-4%. JIRA-4521."
+
+
+def test_get_discrepancy_notice_case_insensitive():
+    from serving.fabric_proxy.server import _get_discrepancy_notice
+
+    metric_entry = {
+        "name": "Revenue",
+        "governed_sources": {
+            "also_exists_in": [
+                {"model": "Finance Reporting", "known_discrepancy": "Some discrepancy."},
+            ]
+        },
+    }
+    assert _get_discrepancy_notice(metric_entry, "finance reporting") == "Some discrepancy."
+
+
+def test_get_discrepancy_notice_returns_none_when_no_match():
+    from serving.fabric_proxy.server import _get_discrepancy_notice
+
+    metric_entry = {
+        "name": "Revenue",
+        "governed_sources": {
+            "also_exists_in": [{"model": "Other Model", "known_discrepancy": "Some note."}]
+        },
+    }
+    assert _get_discrepancy_notice(metric_entry, "RetailSemanticModel") is None
+
+
+def test_get_discrepancy_notice_returns_none_when_no_discrepancy_field():
+    from serving.fabric_proxy.server import _get_discrepancy_notice
+
+    metric_entry = {
+        "name": "Revenue",
+        "governed_sources": {"also_exists_in": [{"model": "Finance Reporting"}]},
+    }
+    assert _get_discrepancy_notice(metric_entry, "Finance Reporting") is None
+
+
+def test_get_discrepancy_notice_returns_none_when_no_also_exists_in():
+    from serving.fabric_proxy.server import _get_discrepancy_notice
+
+    metric_entry = {"name": "Revenue", "governed_sources": {}}
+    assert _get_discrepancy_notice(metric_entry, "Finance Reporting") is None
