@@ -7,7 +7,10 @@ permissions:
   pull-requests: write
 jobs:
   intake:
-    if: contains(join(github.event.issue.labels.*.name, ','), 'canon-interview') && github.event.issue.pull_request
+    if: |
+      contains(join(github.event.issue.labels.*.name, ','), 'canon-interview') &&
+      github.event.issue.pull_request &&
+      contains(fromJson('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
     runs-on: ubuntu-latest
     steps:
       # Checkout the default branch (trusted code), not the PR head.

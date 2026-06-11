@@ -30,10 +30,10 @@ jobs:
           INPUT_DOMAIN: ${{ inputs.domain }}
         run: |
           if [ -n "$INPUT_DOMAIN" ]; then
-            echo "matrix={"domain":["$INPUT_DOMAIN"]}" >> "$GITHUB_OUTPUT"
+            echo "matrix=$(jq -cn --arg d "$INPUT_DOMAIN" '{"domain":[$d]}')" >> "$GITHUB_OUTPUT"
           else
             DOMAINS=$(uv run canon list-domains --json)
-            echo "matrix={"domain":$DOMAINS}" >> "$GITHUB_OUTPUT"
+            echo "matrix=$(echo "$DOMAINS" | jq -c '{"domain":.}')" >> "$GITHUB_OUTPUT"
           fi
 
   scan:
