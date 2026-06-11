@@ -8,9 +8,8 @@ Layer 2: Cross-file consistency checks (17 rules).
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
 
 import jsonschema
@@ -64,11 +63,13 @@ def _validate_against_schema(instance: dict, schema_name: str, filepath: str) ->
     validator = jsonschema.Draft202012Validator(schema)
     for error in validator.iter_errors(instance):
         path = " → ".join(str(p) for p in error.absolute_path) if error.absolute_path else "root"
-        findings.append(Finding(
-            rule=f"schema:{schema_name}",
-            file=filepath,
-            message=f"{path}: {error.message}",
-        ))
+        findings.append(
+            Finding(
+                rule=f"schema:{schema_name}",
+                file=filepath,
+                message=f"{path}: {error.message}",
+            )
+        )
     return findings
 
 
@@ -141,37 +142,40 @@ def validate_domain(domain_path: Path | str, repo_root: Path | None = None) -> V
         ("sensitivity.yaml", sensitivity_data),
     ]:
         if data and data.get("domain") and data["domain"] != domain_slug:
-            err("cross:domain-mismatch", filename,
-                f"domain field '{data['domain']}' does not match folder name '{domain_slug}'")
+            err(
+                "cross:domain-mismatch",
+                filename,
+                f"domain field '{data['domain']}' does not match folder name '{domain_slug}'",
+            )
 
     # Rule 2: metrics[].domain matches file-level domain
     for m in metrics_list:
         if m.get("domain") and m["domain"] != metrics_data.get("domain"):
-            err("cross:metric-domain-mismatch", "metrics.yaml",
-                f"metric '{m['name']}' has domain '{m['domain']}' but file domain is '{metrics_data.get('domain')}'")
+            err(
+                "cross:metric-domain-mismatch",
+                "metrics.yaml",
+                f"metric '{m['name']}' has domain '{m['domain']}' but file domain is '{metrics_data.get('domain')}'",
+            )
 
     # Rule 3: metric names unique within domain
     seen_metric_names: set[str] = set()
     for m in metrics_list:
         if m["name"] in seen_metric_names:
-            err("cross:duplicate-metric-name", "metrics.yaml",
-                f"duplicate metric name: '{m['name']}'")
+            err("cross:duplicate-metric-name", "metrics.yaml", f"duplicate metric name: '{m['name']}'")
         seen_metric_names.add(m["name"])
 
     # Rule 4: dimension names unique within domain
     seen_dim_names: set[str] = set()
     for d in dimensions_list:
         if d["name"] in seen_dim_names:
-            err("cross:duplicate-dimension-name", "ontology.yaml",
-                f"duplicate dimension name: '{d['name']}'")
+            err("cross:duplicate-dimension-name", "ontology.yaml", f"duplicate dimension name: '{d['name']}'")
         seen_dim_names.add(d["name"])
 
     # Rule 5: glossary term names unique within domain
     seen_term_names: set[str] = set()
     for t in terms_list:
         if t["name"] in seen_term_names:
-            err("cross:duplicate-term-name", "glossary.yaml",
-                f"duplicate glossary term: '{t['name']}'")
+            err("cross:duplicate-term-name", "glossary.yaml", f"duplicate glossary term: '{t['name']}'")
         seen_term_names.add(t["name"])
 
     # Rule 6: no alias duplicates another name in the same domain
@@ -179,70 +183,101 @@ def validate_domain(domain_path: Path | str, repo_root: Path | None = None) -> V
     for m in metrics_list:
         for alias in m.get("aliases", []):
             if alias in all_names:
-                err("cross:alias-collides-name", "metrics.yaml",
-                    f"metric '{m['name']}' alias '{alias}' collides with an existing name")
+                err(
+                    "cross:alias-collides-name",
+                    "metrics.yaml",
+                    f"metric '{m['name']}' alias '{alias}' collides with an existing name",
+                )
             if alias in all_aliases:
-                err("cross:duplicate-alias", "metrics.yaml",
-                    f"alias '{alias}' on metric '{m['name']}' already used by '{all_aliases[alias]}'")
+                err(
+                    "cross:duplicate-alias",
+                    "metrics.yaml",
+                    f"alias '{alias}' on metric '{m['name']}' already used by '{all_aliases[alias]}'",
+                )
             else:
                 all_aliases[alias] = m["name"]
 
     for d in dimensions_list:
         for alias in d.get("aliases", []):
             if alias in all_names:
-                err("cross:alias-collides-name", "ontology.yaml",
-                    f"dimension '{d['name']}' alias '{alias}' collides with an existing name")
+                err(
+                    "cross:alias-collides-name",
+                    "ontology.yaml",
+                    f"dimension '{d['name']}' alias '{alias}' collides with an existing name",
+                )
 
     for t in terms_list:
         for alias in t.get("aliases", []):
             if alias in all_names:
-                err("cross:alias-collides-name", "glossary.yaml",
-                    f"term '{t['name']}' alias '{alias}' collides with an existing name")
+                err(
+                    "cross:alias-collides-name",
+                    "glossary.yaml",
+                    f"term '{t['name']}' alias '{alias}' collides with an existing name",
+                )
 
     # Rule 7: depends_on resolves
     for m in metrics_list:
         for dep in m.get("depends_on", []):
             if dep not in all_names:
-                err("cross:unresolved-depends-on", "metrics.yaml",
-                    f"metric '{m['name']}' depends_on '{dep}' which does not exist in this domain")
+                err(
+                    "cross:unresolved-depends-on",
+                    "metrics.yaml",
+                    f"metric '{m['name']}' depends_on '{dep}' which does not exist in this domain",
+                )
 
     # Rule 8: metrics[].sensitivity references declared classification
     for m in metrics_list:
         if m.get("sensitivity") and m["sensitivity"] not in classification_ids:
-            err("cross:unknown-sensitivity", "metrics.yaml",
-                f"metric '{m['name']}' sensitivity '{m['sensitivity']}' not in sensitivity.yaml classifications")
+            err(
+                "cross:unknown-sensitivity",
+                "metrics.yaml",
+                f"metric '{m['name']}' sensitivity '{m['sensitivity']}' not in sensitivity.yaml classifications",
+            )
 
     # Rule 9: glossary sensitivity + override classifications reference declared IDs
     for t in terms_list:
         if t.get("sensitivity") and t["sensitivity"] not in classification_ids:
-            err("cross:unknown-sensitivity", "glossary.yaml",
-                f"term '{t['name']}' sensitivity '{t['sensitivity']}' not declared in sensitivity.yaml")
+            err(
+                "cross:unknown-sensitivity",
+                "glossary.yaml",
+                f"term '{t['name']}' sensitivity '{t['sensitivity']}' not declared in sensitivity.yaml",
+            )
 
     for override_key in ("metric_overrides", "dimension_overrides", "column_overrides"):
         for override in sensitivity_data.get(override_key, []):
             if override.get("classification") and override["classification"] not in classification_ids:
-                err("cross:unknown-classification", "sensitivity.yaml",
-                    f"{override_key} entry classification '{override['classification']}' not declared")
+                err(
+                    "cross:unknown-classification",
+                    "sensitivity.yaml",
+                    f"{override_key} entry classification '{override['classification']}' not declared",
+                )
 
     # Rule 10: glossary.related_metrics references existing metric name
     for t in terms_list:
         for ref in t.get("related_metrics", []):
             if ref not in metric_names:
-                warn("cross:unresolved-related-metric", "glossary.yaml",
-                     f"term '{t['name']}' related_metric '{ref}' does not exist in metrics.yaml")
+                warn(
+                    "cross:unresolved-related-metric",
+                    "glossary.yaml",
+                    f"term '{t['name']}' related_metric '{ref}' does not exist in metrics.yaml",
+                )
 
     # Rule 11: glossary.related_dimensions references existing dimension name
     for t in terms_list:
         for ref in t.get("related_dimensions", []):
             if ref not in dimension_names:
-                warn("cross:unresolved-related-dimension", "glossary.yaml",
-                     f"term '{t['name']}' related_dimension '{ref}' does not exist in ontology.yaml")
+                warn(
+                    "cross:unresolved-related-dimension",
+                    "glossary.yaml",
+                    f"term '{t['name']}' related_dimension '{ref}' does not exist in ontology.yaml",
+                )
 
     # Rule 13: ontology.value_descriptions keys vs profiles.json (if cache present)
     if repo_root is not None:
         profiles_path = repo_root / ".canon-cache" / domain_slug / "profiles.json"
         if profiles_path.exists():
             import json as _json
+
             profiles = _json.loads(profiles_path.read_text(encoding="utf-8"))
             for d in dimensions_list:
                 if d.get("value_descriptions"):
@@ -250,23 +285,31 @@ def validate_domain(domain_path: Path | str, repo_root: Path | None = None) -> V
                     if cached_values:
                         for key in d["value_descriptions"]:
                             if key not in cached_values:
-                                warn("cross:value-description-not-in-profile", "ontology.yaml",
-                                     f"dimension '{d['name']}' value_descriptions key '{key}' "
-                                     f"not in latest profile")
+                                warn(
+                                    "cross:value-description-not-in-profile",
+                                    "ontology.yaml",
+                                    f"dimension '{d['name']}' value_descriptions key '{key}' not in latest profile",
+                                )
 
     # Rule 14: warehouse block required when usage_patterns source=warehouse
     for m in metrics_list:
         for up in m.get("usage_patterns", []):
             if up.get("source") == "warehouse" and not m.get("warehouse"):
-                err("cross:missing-warehouse-block", "metrics.yaml",
-                    f"metric '{m['name']}' has usage_pattern source=warehouse but no warehouse block")
+                err(
+                    "cross:missing-warehouse-block",
+                    "metrics.yaml",
+                    f"metric '{m['name']}' has usage_pattern source=warehouse but no warehouse block",
+                )
 
     # Rule 15: routing required when primary source is semantic_model
     for m in metrics_list:
         primary = m.get("governed_sources", {}).get("primary", {})
         if primary.get("type") == "semantic_model" and not m.get("routing"):
-            err("cross:missing-routing", "metrics.yaml",
-                f"metric '{m['name']}' primary source is semantic_model but routing is not set")
+            err(
+                "cross:missing-routing",
+                "metrics.yaml",
+                f"metric '{m['name']}' primary source is semantic_model but routing is not set",
+            )
 
     # Rule 16: last_reviewed not in the future
     today = date.today()
@@ -275,16 +318,22 @@ def validate_domain(domain_path: Path | str, repo_root: Path | None = None) -> V
         if lr:
             reviewed = lr if isinstance(lr, date) else date.fromisoformat(str(lr))
             if reviewed > today:
-                err("cross:future-last-reviewed", "metrics.yaml",
-                    f"metric '{m['name']}' last_reviewed {reviewed} is in the future")
+                err(
+                    "cross:future-last-reviewed",
+                    "metrics.yaml",
+                    f"metric '{m['name']}' last_reviewed {reviewed} is in the future",
+                )
 
     # Rule 17: deprecated metrics retain required fields
     for m in metrics_list:
         if m.get("status") == "deprecated":
             for req_field in ("definition", "owner", "routing"):
                 if not m.get(req_field):
-                    err("cross:deprecated-missing-field", "metrics.yaml",
-                        f"deprecated metric '{m['name']}' is missing required field '{req_field}'")
+                    err(
+                        "cross:deprecated-missing-field",
+                        "metrics.yaml",
+                        f"deprecated metric '{m['name']}' is missing required field '{req_field}'",
+                    )
 
     return result
 

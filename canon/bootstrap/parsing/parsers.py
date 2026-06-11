@@ -24,8 +24,8 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ParsedChunk:
     source_file: str
-    section: str         # heading or sheet name
-    text: str            # raw extracted text
+    section: str  # heading or sheet name
+    text: str  # raw extracted text
     page: int | None = None
     metadata: dict = field(default_factory=dict)
 
@@ -64,6 +64,7 @@ def parse_directory(directory: Path) -> list[ParsedChunk]:
 
 # ── Markdown / plain text ──────────────────────────────────────────────────────
 
+
 def parse_md(path: Path) -> list[ParsedChunk]:
     text = path.read_text(encoding="utf-8", errors="replace")
     chunks: list[ParsedChunk] = []
@@ -73,27 +74,32 @@ def parse_md(path: Path) -> list[ParsedChunk]:
     for line in text.splitlines():
         if line.startswith("#"):
             if current_lines:
-                chunks.append(ParsedChunk(
-                    source_file=path.name,
-                    section=current_section,
-                    text="\n".join(current_lines).strip(),
-                ))
+                chunks.append(
+                    ParsedChunk(
+                        source_file=path.name,
+                        section=current_section,
+                        text="\n".join(current_lines).strip(),
+                    )
+                )
                 current_lines = []
             current_section = line.lstrip("#").strip()
         else:
             current_lines.append(line)
 
     if current_lines:
-        chunks.append(ParsedChunk(
-            source_file=path.name,
-            section=current_section,
-            text="\n".join(current_lines).strip(),
-        ))
+        chunks.append(
+            ParsedChunk(
+                source_file=path.name,
+                section=current_section,
+                text="\n".join(current_lines).strip(),
+            )
+        )
 
     return [c for c in chunks if c.text]
 
 
 # ── PDF ───────────────────────────────────────────────────────────────────────
+
 
 def parse_pdf(path: Path) -> list[ParsedChunk]:
     try:
@@ -107,17 +113,20 @@ def parse_pdf(path: Path) -> list[ParsedChunk]:
     for page_num, page in enumerate(doc, start=1):
         text = page.get_text("text").strip()
         if text:
-            chunks.append(ParsedChunk(
-                source_file=path.name,
-                section=f"page_{page_num}",
-                text=text,
-                page=page_num,
-            ))
+            chunks.append(
+                ParsedChunk(
+                    source_file=path.name,
+                    section=f"page_{page_num}",
+                    text=text,
+                    page=page_num,
+                )
+            )
     doc.close()
     return chunks
 
 
 # ── Excel ─────────────────────────────────────────────────────────────────────
+
 
 def parse_xlsx(path: Path) -> list[ParsedChunk]:
     try:
@@ -154,18 +163,21 @@ def parse_xlsx(path: Path) -> list[ParsedChunk]:
                 if line:
                     lines.append(line)
             if lines:
-                chunks.append(ParsedChunk(
-                    source_file=path.name,
-                    section=sheet_name,
-                    text="\n".join(lines),
-                    metadata={"headers": headers},
-                ))
+                chunks.append(
+                    ParsedChunk(
+                        source_file=path.name,
+                        section=sheet_name,
+                        text="\n".join(lines),
+                        metadata={"headers": headers},
+                    )
+                )
 
     wb.close()
     return chunks
 
 
 # ── Word (DOCX) ───────────────────────────────────────────────────────────────
+
 
 def parse_docx(path: Path) -> list[ParsedChunk]:
     try:
@@ -185,27 +197,32 @@ def parse_docx(path: Path) -> list[ParsedChunk]:
             continue
         if para.style.name.startswith("Heading"):
             if current_lines:
-                chunks.append(ParsedChunk(
-                    source_file=path.name,
-                    section=current_section,
-                    text="\n".join(current_lines).strip(),
-                ))
+                chunks.append(
+                    ParsedChunk(
+                        source_file=path.name,
+                        section=current_section,
+                        text="\n".join(current_lines).strip(),
+                    )
+                )
                 current_lines = []
             current_section = text
         else:
             current_lines.append(text)
 
     if current_lines:
-        chunks.append(ParsedChunk(
-            source_file=path.name,
-            section=current_section,
-            text="\n".join(current_lines).strip(),
-        ))
+        chunks.append(
+            ParsedChunk(
+                source_file=path.name,
+                section=current_section,
+                text="\n".join(current_lines).strip(),
+            )
+        )
 
     return [c for c in chunks if c.text]
 
 
 # ── HTML (Confluence exports) ─────────────────────────────────────────────────
+
 
 def parse_html(path: Path) -> list[ParsedChunk]:
     try:
@@ -231,21 +248,25 @@ def parse_html(path: Path) -> list[ParsedChunk]:
             continue
         if tag.name in ("h1", "h2", "h3"):
             if current_lines:
-                chunks.append(ParsedChunk(
-                    source_file=path.name,
-                    section=current_section,
-                    text="\n".join(current_lines).strip(),
-                ))
+                chunks.append(
+                    ParsedChunk(
+                        source_file=path.name,
+                        section=current_section,
+                        text="\n".join(current_lines).strip(),
+                    )
+                )
                 current_lines = []
             current_section = text
         else:
             current_lines.append(text)
 
     if current_lines:
-        chunks.append(ParsedChunk(
-            source_file=path.name,
-            section=current_section,
-            text="\n".join(current_lines).strip(),
-        ))
+        chunks.append(
+            ParsedChunk(
+                source_file=path.name,
+                section=current_section,
+                text="\n".join(current_lines).strip(),
+            )
+        )
 
     return [c for c in chunks if c.text]

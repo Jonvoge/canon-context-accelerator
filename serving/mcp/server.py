@@ -1,14 +1,5 @@
 """
 Canon MCP server — serves domain context to AI agents.
-
-Tools:
-  list_domains()          → available domains with descriptions
-  get_domain_context(domain) → full assembled context including dimension profiles
-
-Transports: stdio | streamable-http (default)
-
-Caching: per-domain file-fingerprint cache (sha256 of mtime+size per file).
-Cache is invalidated automatically when any domain file changes.
 """
 
 from __future__ import annotations
@@ -18,17 +9,22 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from serving.auth import AuthConfig
+    from serving.repo_client import RepoClient
 
 import yaml
 from mcp.server import Server
-from mcp.types import Tool, TextContent
+from mcp.types import TextContent, Tool
+
+from canon.config import _normalize, load_scan_config
 
 logger = logging.getLogger(__name__)
 
 _REPO_ROOT_ENV = "CANON_REPO_ROOT"
 
-# ── File fingerprinting ───────────────────────────────────────────────────────
 
 def _file_fingerprint(path: Path) -> str:
     if not path.exists():
@@ -40,15 +36,21 @@ def _file_fingerprint(path: Path) -> str:
 
 def _domain_fingerprint(domain_path: Path, cache_dir: Path) -> str:
     parts = []
-    for fname in ("metrics.yaml", "ontology.yaml", "glossary.yaml", "sensitivity.yaml",
-                  "domain-rules.md", "data-quality.md"):
+    for fname in (
+        "metrics.yaml",
+        "ontology.yaml",
+        "glossary.yaml",
+        "sensitivity.yaml",
+        "domain-rules.md",
+        "data-quality.md",
+    ):
         parts.append(_file_fingerprint(domain_path / fname))
-    parts.append(_file_fingerprint(cache_dir / "profiles.json"))
-    parts.append(_file_fingerprint(cache_dir / "schema.json"))
+    if cache_dir.exists():
+        for path in sorted(cache_dir.rglob("*")):
+            if path.is_file() and path.name in {"profiles.json", "schema.json"}:
+                parts.append(_file_fingerprint(path))
     return hashlib.sha256(":".join(parts).encode()).hexdigest()[:16]
 
-
-# ── Domain loading ────────────────────────────────────────────────────────────
 
 def _load_yaml(path: Path) -> dict | None:
     if not path.exists():
@@ -62,12 +64,47 @@ def _load_md(path: Path) -> str | None:
     return path.read_text(encoding="utf-8")
 
 
+def _available_models(domain_entry: dict | None) -> list[dict[str, Any]]:
+    if not domain_entry:
+        return []
+    return [
+        {
+            "id": model["connector"],
+            "role": model["role"],
+            "primary": model.get("primary", False),
+            "description": model.get("description", ""),
+        }
+        for model in domain_entry.get("models", [])
+    ]
+
+
+def _load_connector_cache(repo_root: Path, domain: str, connector_id: str, filename: str) -> Any:
+    new_path = repo_root / ".canon-cache" / domain / connector_id / filename
+    old_path = repo_root / ".canon-cache" / domain / filename
+    target = new_path if new_path.exists() else old_path
+    if not target.exists():
+        return {} if filename == "profiles.json" else None
+    return json.loads(target.read_text(encoding="utf-8"))
+
+
 def _assemble_domain(domain: str, repo_root: Path) -> dict[str, Any]:
     domain_path = repo_root / "domains" / domain
     if not domain_path.exists():
         return {"error": f"Domain '{domain}' not found"}
 
-    ctx: dict[str, Any] = {
+    scan_cfg = load_scan_config(repo_root / "scan-config.yaml") if (repo_root / "scan-config.yaml").exists() else {}
+    domain_entry = next((entry for entry in scan_cfg.get("domains", []) if entry.get("name") == domain), None)
+    available_models = _available_models(domain_entry)
+
+    model_schema = {
+        model["id"]: _load_connector_cache(repo_root, domain, model["id"], "schema.json") for model in available_models
+    }
+    dimension_profiles = {
+        model["id"]: _load_connector_cache(repo_root, domain, model["id"], "profiles.json")
+        for model in available_models
+    }
+
+    return {
         "domain": domain,
         "metrics": _load_yaml(domain_path / "metrics.yaml"),
         "ontology": _load_yaml(domain_path / "ontology.yaml"),
@@ -75,83 +112,55 @@ def _assemble_domain(domain: str, repo_root: Path) -> dict[str, Any]:
         "sensitivity": _load_yaml(domain_path / "sensitivity.yaml"),
         "domain_rules": _load_md(domain_path / "domain-rules.md"),
         "data_quality": _load_md(domain_path / "data-quality.md"),
+        "dimension_profiles": dimension_profiles,
+        "model_schema": model_schema,
+        "available_models": available_models,
     }
-
-    # Include dimension profiles if available
-    cache_dir = repo_root / ".canon-cache" / domain
-    profiles_path = cache_dir / "profiles.json"
-    if profiles_path.exists():
-        ctx["dimension_profiles"] = json.loads(profiles_path.read_text(encoding="utf-8"))
-    else:
-        ctx["dimension_profiles"] = {}
-
-    # Include semantic model schema (tables/columns/measures) from last scan
-    schema_path = cache_dir / "schema.json"
-    if schema_path.exists():
-        ctx["model_schema"] = json.loads(schema_path.read_text(encoding="utf-8"))
-    else:
-        ctx["model_schema"] = None
-
-    # Resolve available_models from scan-config.yaml
-    scan_cfg_path = repo_root / "scan-config.yaml"
-    if scan_cfg_path.exists():
-        scan_cfg = yaml.safe_load(scan_cfg_path.read_text(encoding="utf-8"))
-        domain_entry = next((d for d in scan_cfg.get("domains", []) if d.get("name") == domain), None)
-        semantic_connector = domain_entry.get("semantic_connector", "") if domain_entry else ""
-        ctx["available_models"] = [semantic_connector] if semantic_connector else []
-    else:
-        ctx["available_models"] = []
-
-    return ctx
 
 
 def _list_domains(repo_root: Path) -> list[dict]:
     domains_dir = repo_root / "domains"
     result = []
-    for d in sorted(domains_dir.iterdir()):
-        if d.is_dir() and d.name != "_template":
-            metrics = _load_yaml(d / "metrics.yaml")
-            ontology = _load_yaml(d / "ontology.yaml")
+    for domain_dir in sorted(domains_dir.iterdir()):
+        if domain_dir.is_dir() and domain_dir.name != "_template":
+            metrics = _load_yaml(domain_dir / "metrics.yaml")
+            ontology = _load_yaml(domain_dir / "ontology.yaml")
             metric_count = len(metrics.get("metrics", [])) if metrics else 0
             dimension_count = len(ontology.get("dimensions", [])) if ontology else 0
-
-            # Build trigger aliases from metric aliases
             aliases: list[str] = []
             if metrics:
-                for m in metrics.get("metrics", []):
-                    aliases.extend(m.get("aliases", []))
-
-            result.append({
-                "name": d.name,
-                "metric_count": metric_count,
-                "dimension_count": dimension_count,
-                "trigger_aliases": aliases[:20],  # cap for token economy
-            })
+                for metric in metrics.get("metrics", []):
+                    aliases.extend(metric.get("aliases", []))
+            result.append(
+                {
+                    "name": domain_dir.name,
+                    "metric_count": metric_count,
+                    "dimension_count": dimension_count,
+                    "trigger_aliases": aliases[:20],
+                }
+            )
     return result
 
 
-# ── Per-session cache ─────────────────────────────────────────────────────────
-
 class _DomainCache:
     def __init__(self) -> None:
-        self._cache: dict[str, tuple[str, dict]] = {}  # domain → (fingerprint, context)
+        self._cache: dict[str, tuple[str, dict]] = {}
 
     def get(self, domain: str, repo_root: Path) -> dict:
         domain_path = repo_root / "domains" / domain
         cache_dir = repo_root / ".canon-cache" / domain
-        fp = _domain_fingerprint(domain_path, cache_dir)
+        fingerprint = _domain_fingerprint(domain_path, cache_dir)
         cached = self._cache.get(domain)
-        if cached and cached[0] == fp:
+        if cached and cached[0] == fingerprint:
             return cached[1]
         ctx = _assemble_domain(domain, repo_root)
-        self._cache[domain] = (fp, ctx)
+        self._cache[domain] = (fingerprint, ctx)
         return ctx
 
 
-# ── Factory helpers ──────────────────────────────────────────────────────────
-
-def _create_repo_client() -> "RepoClient | None":
+def _create_repo_client() -> RepoClient | None:
     from serving.repo_client import RepoClient, RepoConfig
+
     provider = os.environ.get("CANON_REPO_PROVIDER")
     if not provider:
         return None
@@ -167,8 +176,9 @@ def _create_repo_client() -> "RepoClient | None":
     return RepoClient(config)
 
 
-def _create_auth_config() -> "AuthConfig | None":
+def _create_auth_config() -> AuthConfig | None:
     from serving.auth import AuthConfig
+
     tenant_id = os.environ.get("CANON_AUTH_TENANT_ID")
     if not tenant_id:
         return None
@@ -180,8 +190,6 @@ def _create_auth_config() -> "AuthConfig | None":
         required=True,
     )
 
-
-# ── Remote async loaders ──────────────────────────────────────────────────────
 
 async def _assemble_domain_remote(domain: str, repo_client) -> dict:
     prefix = f"domains/{domain}"
@@ -197,15 +205,24 @@ async def _assemble_domain_remote(domain: str, repo_client) -> dict:
 
     scan_cfg_raw = await repo_client.fetch_file_or_none("scan-config.yaml")
     if scan_cfg_raw:
-        scan_cfg = yaml.safe_load(scan_cfg_raw)
-        domain_entry = next((d for d in scan_cfg.get("domains", []) if d.get("name") == domain), None)
-        semantic_connector = domain_entry.get("semantic_connector", "") if domain_entry else ""
-        available_models = [semantic_connector] if semantic_connector else []
+        scan_cfg = _normalize(yaml.safe_load(scan_cfg_raw) or {})
+        domain_entry = next((entry for entry in scan_cfg.get("domains", []) if entry.get("name") == domain), None)
+        available_models = _available_models(domain_entry)
     else:
         available_models = []
 
-    schema_raw = await repo_client.fetch_file_or_none(f".canon-cache/{domain}/schema.json")
-    model_schema = json.loads(schema_raw) if schema_raw else None
+    async def fetch_connector_cache(connector_id: str, filename: str) -> Any:
+        content = await repo_client.fetch_file_or_none(f".canon-cache/{domain}/{connector_id}/{filename}")
+        if content is None:
+            content = await repo_client.fetch_file_or_none(f".canon-cache/{domain}/{filename}")
+        if content is None:
+            return {} if filename == "profiles.json" else None
+        return json.loads(content)
+
+    model_schema = {model["id"]: await fetch_connector_cache(model["id"], "schema.json") for model in available_models}
+    dimension_profiles = {
+        model["id"]: await fetch_connector_cache(model["id"], "profiles.json") for model in available_models
+    }
 
     return {
         "domain": domain,
@@ -215,7 +232,7 @@ async def _assemble_domain_remote(domain: str, repo_client) -> dict:
         "sensitivity": await fetch_yaml("sensitivity.yaml"),
         "domain_rules": await fetch_md("domain-rules.md"),
         "data_quality": await fetch_md("data-quality.md"),
-        "dimension_profiles": {},
+        "dimension_profiles": dimension_profiles,
         "model_schema": model_schema,
         "available_models": available_models,
     }
@@ -223,95 +240,138 @@ async def _assemble_domain_remote(domain: str, repo_client) -> dict:
 
 async def _list_domains_remote(repo_client) -> list[dict]:
     content = await repo_client.fetch_file("scan-config.yaml")
-    scan_config = yaml.safe_load(content)
+    scan_config = _normalize(yaml.safe_load(content) or {})
     result = []
-    for d in scan_config.get("domains", []):
-        result.append({
-            "name": d["name"],
-            "metric_count": None,
-            "dimension_count": None,
-            "trigger_aliases": [],
-        })
+    for domain in scan_config.get("domains", []):
+        result.append({"name": domain["name"], "metric_count": None, "dimension_count": None, "trigger_aliases": []})
     return result
 
 
-# ── Scoped context helpers ────────────────────────────────────────────────────
-
 def _scope_metric_context(full_ctx: dict, metric_name: str) -> dict:
-    """Return a focused context slice for a single metric."""
     metrics_data = full_ctx.get("metrics") or {}
     all_metrics = metrics_data.get("metrics", []) if metrics_data else []
     metric_entry = next(
-        (m for m in all_metrics if m.get("name", "").lower() == metric_name.lower()), None
+        (metric for metric in all_metrics if metric.get("name", "").lower() == metric_name.lower()), None
     )
     if metric_entry is None:
         return {"error": f"Metric '{metric_name}' not found in domain context."}
 
-    # Include related glossary terms (match on metric name / depends_on names)
     glossary_data = full_ctx.get("glossary") or {}
     all_terms = glossary_data.get("terms", []) if glossary_data else []
-    related_names = {metric_entry["name"].lower()} | {d.lower() for d in metric_entry.get("depends_on", [])}
-    glossary_terms = [
-        t for t in all_terms
-        if t.get("term", "").lower() in related_names
-    ]
-
-    # Include domain rules (full text — agent needs them for filter context)
-    domain_rules = full_ctx.get("domain_rules")
-
-    # Extract schema tables referenced by this metric's governed sources
-    model_schema = full_ctx.get("model_schema")
-    execution = {
-        "available_models": full_ctx.get("available_models", []),
-    }
+    related_names = {metric_entry["name"].lower()} | {dep.lower() for dep in metric_entry.get("depends_on", [])}
+    glossary_terms = [term for term in all_terms if term.get("term", "").lower() in related_names]
 
     return {
         "domain": full_ctx.get("domain"),
         "metric": metric_entry,
         "glossary_terms": glossary_terms,
-        "domain_rules": domain_rules,
-        "model_schema": model_schema,
-        "execution": execution,
+        "domain_rules": full_ctx.get("domain_rules"),
+        "model_schema": full_ctx.get("model_schema"),
+        "execution": {"available_models": full_ctx.get("available_models", [])},
     }
 
 
 def _resolve_metric(full_ctx: dict, question: str) -> list[dict]:
-    """Match a question against metric names and aliases. Returns top 3 by score."""
     metrics_data = full_ctx.get("metrics") or {}
     all_metrics = metrics_data.get("metrics", []) if metrics_data else []
-
     q_tokens = set(question.lower().split())
-
     scored = []
-    for m in all_metrics:
-        name = m.get("name", "")
-        candidates = [name.lower()] + [a.lower() for a in m.get("aliases", [])]
+    for metric in all_metrics:
+        name = metric.get("name", "")
+        candidates = [name.lower()] + [alias.lower() for alias in metric.get("aliases", [])]
         score = 0
         for candidate in candidates:
-            c_tokens = set(candidate.split())
-            overlap = len(q_tokens & c_tokens)
+            candidate_tokens = set(candidate.split())
+            overlap = len(q_tokens & candidate_tokens)
             if overlap:
-                # Exact full match scores highest
                 if candidate in question.lower():
                     score = max(score, 100 + overlap)
                 else:
                     score = max(score, overlap * 10)
         if score > 0:
             scored.append({"metric": name, "confidence": score})
-
-    scored.sort(key=lambda x: x["confidence"], reverse=True)
+    scored.sort(key=lambda item: item["confidence"], reverse=True)
     top = scored[:3]
-
-    # Normalise confidence to 0-1
     if top:
         max_score = top[0]["confidence"]
         for item in top:
             item["confidence"] = round(item["confidence"] / max_score, 2)
-
     return top
 
 
-# ── MCP server factory ────────────────────────────────────────────────────────
+def _load_domain_index(repo_root: Path) -> dict:
+    index_path = repo_root / "domains" / "_index.json"
+    if index_path.exists():
+        return json.loads(index_path.read_text(encoding="utf-8"))
+    return {"domains": _list_domains(repo_root)}
+
+
+def _score_text(question: str, *texts: str) -> int:
+    q_lower = question.lower()
+    q_tokens = set(q_lower.split())
+    score = 0
+    for text in texts:
+        lowered = (text or "").lower()
+        if not lowered:
+            continue
+        tokens = set(lowered.split())
+        overlap = len(q_tokens & tokens)
+        if overlap:
+            score = max(score, overlap * 10)
+        if lowered and lowered in q_lower:
+            score = max(score, 100 + len(tokens))
+    return score
+
+
+def _resolve_metric_across_domains(repo_root: Path, question: str) -> list[dict]:
+    index = _load_domain_index(repo_root)
+    scored = []
+    for domain_entry in index.get("domains", []):
+        domain = domain_entry["name"]
+        ctx = _assemble_domain(domain, repo_root)
+        metrics = (ctx.get("metrics") or {}).get("metrics", [])
+        for metric in metrics:
+            score = _score_text(
+                question, metric.get("name", ""), *(metric.get("aliases", [])), domain_entry.get("description", "")
+            )
+            if score > 0:
+                scored.append({"domain": domain, "metric": metric.get("name", ""), "confidence": score})
+    scored.sort(key=lambda item: item["confidence"], reverse=True)
+    top = scored[:3]
+    if top:
+        max_score = top[0]["confidence"]
+        for item in top:
+            item["confidence"] = round(item["confidence"] / max_score, 2)
+    return top
+
+
+async def _resolve_metric_across_domains_remote(repo_client, question: str) -> list[dict]:
+    index_raw = await repo_client.fetch_file_or_none("domains/_index.json")
+    if index_raw:
+        index = json.loads(index_raw)
+        domains = [entry["name"] for entry in index.get("domains", [])]
+        descriptions = {entry["name"]: entry.get("description", "") for entry in index.get("domains", [])}
+    else:
+        domains = [entry["name"] for entry in await _list_domains_remote(repo_client)]
+        descriptions = {}
+    scored = []
+    for domain in domains:
+        ctx = await _assemble_domain_remote(domain, repo_client)
+        metrics = (ctx.get("metrics") or {}).get("metrics", [])
+        for metric in metrics:
+            score = _score_text(
+                question, metric.get("name", ""), *(metric.get("aliases", [])), descriptions.get(domain, "")
+            )
+            if score > 0:
+                scored.append({"domain": domain, "metric": metric.get("name", ""), "confidence": score})
+    scored.sort(key=lambda item: item["confidence"], reverse=True)
+    top = scored[:3]
+    if top:
+        max_score = top[0]["confidence"]
+        for item in top:
+            item["confidence"] = round(item["confidence"] / max_score, 2)
+    return top
+
 
 def create_app(repo_root: Path, repo_client=None) -> Server:
     app = Server(
@@ -321,12 +381,10 @@ def create_app(repo_root: Path, repo_client=None) -> Server:
             "Protocol: "
             "1) Call list_domains to see available domains. "
             "2) Call get_domain_context(domain) before any data query — this returns metrics definitions, "
-            "ontology, domain rules, model_schema (tables/measures for DAX), and available_models "
-            "(connector ids for FabricProxy execute_query). "
-            "3) Use FabricProxy execute_query(domain, model, dax) for governed data retrieval, "
-            "where model is the connector id from available_models. "
-            "Do not fall back to other Fabric tools for governed domains — "
-            "Canon definitions take precedence over any other source."
+            "ontology, domain rules, available_models, and model_schema. "
+            "3) Pick model from available_models using its description; prefer primary: true for governed aggregates. "
+            "4) Use FabricProxy execute_query or execute_metric with that model. "
+            "Do not fall back to other Fabric tools for governed domains — Canon definitions take precedence."
         ),
     )
     cache = _DomainCache()
@@ -336,23 +394,12 @@ def create_app(repo_root: Path, repo_client=None) -> Server:
         return [
             Tool(
                 name="list_domains",
-                description=(
-                    "List all available Canon domains with their metric and dimension counts. "
-                    "Call this first to discover what context is available."
-                ),
+                description="List all available Canon domains with their metric and dimension counts. Call this first to discover what context is available.",
                 inputSchema={"type": "object", "properties": {}, "required": []},
             ),
             Tool(
                 name="get_domain_context",
-                description=(
-                    "Get the full assembled context for a Canon domain. Returns: metrics definitions, "
-                    "ontology (dimensions + enumerated values), glossary terms, domain routing rules, "
-                    "data quality notes, sensitivity guidance, dimension value profiles, "
-                    "available_models (connector ids for FabricProxy execute_query), "
-                    "and model_schema (table/column/measure names from the last scan — use these "
-                    "when writing DAX queries). Call this before any FabricProxy execute_query call. "
-                    "For single-metric questions, use get_metric_context instead to reduce context size."
-                ),
+                description="Get the full assembled context for a Canon domain. Returns metrics, ontology, glossary, routing rules, dimension profiles, structured available_models, and model_schema from the last scan.",
                 inputSchema={
                     "type": "object",
                     "properties": {
@@ -366,19 +413,11 @@ def create_app(repo_root: Path, repo_client=None) -> Server:
             ),
             Tool(
                 name="get_metric_context",
-                description=(
-                    "Get scoped context for a single metric — metric definition, governed sources, "
-                    "applicable domain rules, related glossary terms, available_models, and relevant "
-                    "schema tables. Much smaller than get_domain_context. "
-                    "Preferred for single-metric questions. Use resolve first if you are unsure of the metric name."
-                ),
+                description="Get scoped context for a single metric — metric definition, governed sources, applicable domain rules, related glossary terms, available_models, and relevant schema tables.",
                 inputSchema={
                     "type": "object",
                     "properties": {
-                        "domain": {
-                            "type": "string",
-                            "description": "Domain slug, e.g. 'retail'.",
-                        },
+                        "domain": {"type": "string", "description": "Domain slug, e.g. 'retail'."},
                         "metric": {
                             "type": "string",
                             "description": "Metric name exactly as defined in Canon, e.g. 'Total Revenue'.",
@@ -389,25 +428,14 @@ def create_app(repo_root: Path, repo_client=None) -> Server:
             ),
             Tool(
                 name="resolve",
-                description=(
-                    "Match a natural language question to the most relevant Canon metric(s). "
-                    "Returns up to 3 candidates with confidence scores. "
-                    "Call this first when the user asks a data question, then call get_metric_context "
-                    "on the top match before executing."
-                ),
+                description="Match a natural language question to the most relevant Canon metric(s). Returns up to 3 candidates with confidence scores.",
                 inputSchema={
                     "type": "object",
                     "properties": {
-                        "domain": {
-                            "type": "string",
-                            "description": "Domain slug, e.g. 'retail'.",
-                        },
-                        "question": {
-                            "type": "string",
-                            "description": "The user's natural language question.",
-                        },
+                        "domain": {"type": "string", "description": "Optional domain slug, e.g. 'retail'."},
+                        "question": {"type": "string", "description": "The user's natural language question."},
                     },
-                    "required": ["domain", "question"],
+                    "required": ["question"],
                 },
             ),
         ]
@@ -415,55 +443,63 @@ def create_app(repo_root: Path, repo_client=None) -> Server:
     @app.call_tool()
     async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         if name == "list_domains":
-            if repo_client is not None:
-                domains = await _list_domains_remote(repo_client)
-            else:
-                domains = _list_domains(repo_root)
+            domains = await _list_domains_remote(repo_client) if repo_client is not None else _list_domains(repo_root)
             return [TextContent(type="text", text=json.dumps(domains, indent=2))]
-
-        elif name == "get_domain_context":
+        if name == "get_domain_context":
             domain = arguments.get("domain", "")
             if not domain:
                 return [TextContent(type="text", text='{"error": "domain is required"}')]
-            if repo_client is not None:
-                ctx = await _assemble_domain_remote(domain, repo_client)
-            else:
-                ctx = cache.get(domain, repo_root)
+            ctx = (
+                await _assemble_domain_remote(domain, repo_client)
+                if repo_client is not None
+                else cache.get(domain, repo_root)
+            )
             return [TextContent(type="text", text=json.dumps(ctx, indent=2, default=str))]
-
-        elif name == "get_metric_context":
+        if name == "get_metric_context":
             domain = arguments.get("domain", "")
             metric = arguments.get("metric", "")
             if not domain or not metric:
                 return [TextContent(type="text", text='{"error": "domain and metric are required"}')]
-            if repo_client is not None:
-                ctx = await _assemble_domain_remote(domain, repo_client)
-            else:
-                ctx = cache.get(domain, repo_root)
-            result = _scope_metric_context(ctx, metric)
-            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
-
-        elif name == "resolve":
+            ctx = (
+                await _assemble_domain_remote(domain, repo_client)
+                if repo_client is not None
+                else cache.get(domain, repo_root)
+            )
+            return [
+                TextContent(type="text", text=json.dumps(_scope_metric_context(ctx, metric), indent=2, default=str))
+            ]
+        if name == "resolve":
             domain = arguments.get("domain", "")
             question = arguments.get("question", "")
-            if not domain or not question:
-                return [TextContent(type="text", text='{"error": "domain and question are required"}')]
-            if repo_client is not None:
-                ctx = await _assemble_domain_remote(domain, repo_client)
-            else:
-                ctx = cache.get(domain, repo_root)
-            matches = _resolve_metric(ctx, question)
-            return [TextContent(type="text", text=json.dumps({"domain": domain, "question": question, "matches": matches}, indent=2))]
-
+            if not question:
+                return [TextContent(type="text", text='{"error": "question is required"}')]
+            if domain:
+                ctx = (
+                    await _assemble_domain_remote(domain, repo_client)
+                    if repo_client is not None
+                    else cache.get(domain, repo_root)
+                )
+                matches = _resolve_metric(ctx, question)
+                return [
+                    TextContent(
+                        type="text",
+                        text=json.dumps({"domain": domain, "question": question, "matches": matches}, indent=2),
+                    )
+                ]
+            matches = (
+                await _resolve_metric_across_domains_remote(repo_client, question)
+                if repo_client is not None
+                else _resolve_metric_across_domains(repo_root, question)
+            )
+            return [TextContent(type="text", text=json.dumps({"question": question, "matches": matches}, indent=2))]
         return [TextContent(type="text", text=json.dumps({"error": f"Unknown tool: {name}"}))]
 
     return app
 
 
-# ── Transport runners ─────────────────────────────────────────────────────────
-
 async def run_stdio_server(repo_root: Path) -> None:
     from mcp.server.stdio import stdio_server
+
     app = create_app(repo_root)
     async with stdio_server() as (read_stream, write_stream):
         await app.run(read_stream, write_stream, app.create_initialization_options())
@@ -471,15 +507,14 @@ async def run_stdio_server(repo_root: Path) -> None:
 
 async def run_http_server(repo_root: Path, port: int = 8000) -> None:
     import uvicorn
+    from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
     from starlette.applications import Starlette
     from starlette.requests import Request
     from starlette.responses import JSONResponse
     from starlette.routing import Mount, Route
-    from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 
     repo_client = _create_repo_client()
     auth_config = _create_auth_config()
-
     app = create_app(repo_root, repo_client=repo_client)
     session_manager = StreamableHTTPSessionManager(app, json_response=True, stateless=True)
 
@@ -489,15 +524,27 @@ async def run_http_server(repo_root: Path, port: int = 8000) -> None:
     async def healthz(request: Request) -> JSONResponse:
         return JSONResponse({"status": "ok"})
 
-    routes = [
-        Route("/healthz", healthz, methods=["GET"]),
-        Route("/readyz", healthz, methods=["GET"]),
-    ]
+    routes = [Route("/healthz", healthz, methods=["GET"]), Route("/readyz", healthz, methods=["GET"])]
 
     if auth_config:
-        from serving.auth import resource_metadata_route, authorization_server_metadata_route, authorization_proxy_route, token_proxy_route, create_asgi_auth_middleware
-        routes.append(Route("/.well-known/oauth-protected-resource", resource_metadata_route(auth_config), methods=["GET"]))
-        routes.append(Route("/.well-known/oauth-authorization-server", authorization_server_metadata_route(auth_config), methods=["GET"]))
+        from serving.auth import (
+            authorization_proxy_route,
+            authorization_server_metadata_route,
+            create_asgi_auth_middleware,
+            resource_metadata_route,
+            token_proxy_route,
+        )
+
+        routes.append(
+            Route("/.well-known/oauth-protected-resource", resource_metadata_route(auth_config), methods=["GET"])
+        )
+        routes.append(
+            Route(
+                "/.well-known/oauth-authorization-server",
+                authorization_server_metadata_route(auth_config),
+                methods=["GET"],
+            )
+        )
         routes.append(Route("/authorize", authorization_proxy_route(auth_config), methods=["GET"]))
         routes.append(Route("/token", token_proxy_route(auth_config), methods=["POST"]))
         routes.append(Route("/oauth/token", token_proxy_route(auth_config), methods=["POST"]))
@@ -506,7 +553,6 @@ async def run_http_server(repo_root: Path, port: int = 8000) -> None:
         mcp_handler = handle_mcp
 
     routes.append(Mount("/", app=mcp_handler))
-
     starlette_app = Starlette(routes=routes)
 
     async with session_manager.run():
@@ -518,6 +564,7 @@ async def run_http_server(repo_root: Path, port: int = 8000) -> None:
 
 if __name__ == "__main__":
     import asyncio
+
     root = Path(os.environ.get(_REPO_ROOT_ENV, Path(__file__).resolve().parent.parent.parent))
     port = int(os.environ.get("CANON_MCP_PORT", 8000))
     transport = os.environ.get("CANON_MCP_TRANSPORT", "streamable-http")
@@ -526,4 +573,3 @@ if __name__ == "__main__":
         asyncio.run(run_stdio_server(root))
     else:
         asyncio.run(run_http_server(root, port=port))
-

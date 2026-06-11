@@ -116,3 +116,10 @@ HOW TO USE THIS FILE:
 | Date | Approver | Summary |
 |---|---|---|
 | TODO | TODO | Initial domain rules |
+
+
+## Query routing
+
+- **Aggregates / KPIs → execute_metric (DAX, primary semantic model)**
+- **Detail rows, joins, exports, columns absent from the model → execute_metric SQL pattern, else execute_sql**
+- Agent must state in its answer which path produced the number.

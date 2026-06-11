@@ -62,3 +62,15 @@ def test_cache_fingerprint_changes_on_file_modification(repo_root: Path, tmp_pat
     fp2 = _domain_fingerprint(dst, cache_dir)
     assert fp1 != fp2, "Fingerprint did not change after file modification"
 
+
+def test_create_app_has_four_tools(repo_root):
+    import asyncio
+
+    from serving.mcp.server import create_app
+
+    server = create_app(repo_root)
+    from mcp.types import ListToolsRequest
+
+    result = asyncio.run(server.request_handlers[ListToolsRequest](ListToolsRequest()))
+    tool_names = {t.name for t in result.root.tools}
+    assert {"list_domains", "get_domain_context", "get_metric_context", "resolve"} == tool_names

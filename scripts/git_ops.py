@@ -41,8 +41,7 @@ def _repo() -> str:
     slug = os.environ.get("GITHUB_REPOSITORY") or os.environ.get("CANON_GITHUB_REPO", "")
     if not slug:
         raise RuntimeError(
-            "GitHub repo slug not set. Set GITHUB_REPOSITORY (Actions) "
-            "or CANON_GITHUB_REPO (local dev)."
+            "GitHub repo slug not set. Set GITHUB_REPOSITORY (Actions) or CANON_GITHUB_REPO (local dev)."
         )
     return slug
 

@@ -27,15 +27,7 @@ def semantic_config() -> dict:
 
 def _make_dax_response(rows: list[list]) -> dict:
     """Build a Power BI executeQueries response JSON."""
-    return {
-        "results": [
-            {
-                "tables": [
-                    {"rows": rows}
-                ]
-            }
-        ]
-    }
+    return {"results": [{"tables": [{"rows": rows}]}]}
 
 
 @patch("connectors.fabric_semantic.ClientSecretCredential")
@@ -113,9 +105,9 @@ def test_fallback_to_info_functions(mock_post: MagicMock, mock_cred: MagicMock, 
     # Second call (INFO.*) succeeds
     tables_success = MagicMock()
     tables_success.status_code = 200
-    tables_success.json.return_value = _make_dax_response([
-        {"[Name]": "Sales", "[ExplicitName]": "Sales", "[IsHidden]": False, "[ID]": 1}
-    ])
+    tables_success.json.return_value = _make_dax_response(
+        [{"[Name]": "Sales", "[ExplicitName]": "Sales", "[IsHidden]": False, "[ID]": 1}]
+    )
 
     # Subsequent calls succeed with empty results
     empty_success = MagicMock()

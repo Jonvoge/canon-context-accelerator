@@ -22,7 +22,6 @@ def main():
 @click.option("--repo-root", default=None, type=click.Path(), help="Path to repo root")
 def validate(domain: str | None, repo_root: str | None):
     """Validate domain YAML files against schemas and cross-file rules."""
-    import json
     from canon.schema.validator import validate_all_domains, validate_domain
 
     root = Path(repo_root) if repo_root else _REPO_ROOT
@@ -39,7 +38,9 @@ def validate(domain: str | None, repo_root: str | None):
             click.echo(click.style(f"✓ {d}: valid", fg="green"))
         else:
             any_error = True
-            click.echo(click.style(f"✗ {d}: {len(result.errors)} error(s), {len(result.warnings)} warning(s)", fg="red"))
+            click.echo(
+                click.style(f"✗ {d}: {len(result.errors)} error(s), {len(result.warnings)} warning(s)", fg="red")
+            )
             for f in result.errors:
                 click.echo(f"  ERROR [{f.rule}] {f.message}")
             for f in result.warnings:
@@ -55,9 +56,16 @@ def validate(domain: str | None, repo_root: str | None):
 @click.option("--create-issues/--no-create-issues", default=False, help="Create GitHub issues for findings")
 @click.option("--github-repo", default=None, envvar="GITHUB_REPOSITORY", help="GitHub repo slug (owner/repo)")
 @click.option("--github-token", default=None, envvar="GITHUB_TOKEN", help="GitHub token for issue creation")
-def scan(domain: str, config: str, repo_root: str | None, create_issues: bool, github_repo: str | None, github_token: str | None):
+def scan(
+    domain: str,
+    config: str,
+    repo_root: str | None,
+    create_issues: bool,
+    github_repo: str | None,
+    github_token: str | None,
+):
     """Run structural scan for a domain."""
-    from scripts.scan import run_scan, create_github_issues, _get_domain_config, _load_scan_config
+    from scripts.scan import _get_domain_config, _load_scan_config, create_github_issues, run_scan
 
     root = Path(repo_root) if repo_root else _REPO_ROOT
     config_path = root / config
@@ -93,15 +101,35 @@ def _print_findings(result) -> None:
         click.echo(f"    {f.description}")
 
 
+@main.command("list-domains")
+@click.option("--config", default="scan-config.yaml", help="Path to scan config")
+@click.option("--repo-root", default=None, type=click.Path(), help="Path to repo root")
+@click.option("--json", "as_json", is_flag=True, default=False, help="Print domains as JSON")
+def list_domains(config: str, repo_root: str | None, as_json: bool):
+    """List configured domain slugs from scan-config.yaml."""
+    import json
+
+    root = Path(repo_root) if repo_root else _REPO_ROOT
+    cfg = yaml.safe_load((root / config).read_text(encoding="utf-8")) or {}
+    domains = [d["name"] for d in cfg.get("domains", [])]
+    if as_json:
+        click.echo(json.dumps(domains))
+    else:
+        for domain in domains:
+            click.echo(domain)
+
+
 @main.command()
-@click.option("--transport", default="streamable-http", show_default=True,
-              type=click.Choice(["stdio", "sse", "streamable-http"]))
+@click.option(
+    "--transport", default="streamable-http", show_default=True, type=click.Choice(["stdio", "sse", "streamable-http"])
+)
 @click.option("--port", default=8000, show_default=True, envvar="CANON_MCP_PORT")
 @click.option("--repo-root", default=None, type=click.Path(), envvar="CANON_REPO_ROOT")
 def serve(transport: str, port: int, repo_root: str | None):
     """Start the Canon MCP server."""
     import asyncio
-    from serving.mcp.server import create_app, run_http_server, run_stdio_server
+
+    from serving.mcp.server import run_http_server, run_stdio_server
 
     root = Path(repo_root) if repo_root else _REPO_ROOT
 
@@ -111,14 +139,39 @@ def serve(transport: str, port: int, repo_root: str | None):
         asyncio.run(run_http_server(root, port=port))
 
 
-@main.command("interview")
-@click.option("--domain", required=True, help="Domain slug to interview")
-@click.option("--repo-root", default=None, type=click.Path())
-def interview(domain: str, repo_root: str | None):
-    """Run a terminal interview to draft definitions for undocumented measures."""
-    from scripts.interview import start_interview
+@main.command("build-index")
+@click.option("--repo-root", default=None, type=click.Path(), help="Path to repo root")
+def build_index(repo_root: str | None):
+    """Build domains/_index.json."""
+    import json
+
+    from scripts.build_index import build_index as _build_index
 
     root = Path(repo_root) if repo_root else _REPO_ROOT
+    index = _build_index(root)
+    out = root / "domains" / "_index.json"
+    out.write_text(json.dumps(index, indent=2), encoding="utf-8")
+    click.echo(click.style(f"✓ Wrote {out}", fg="green"))
+
+
+@main.command("interview")
+@click.option("--domain", required=False, help="Domain slug to interview")
+@click.option(
+    "--from-issue", is_flag=True, default=False, help="Draft a metric entry from GITHUB_EVENT_PATH issue comment data"
+)
+@click.option("--repo-root", default=None, type=click.Path())
+def interview(domain: str | None, from_issue: bool, repo_root: str | None):
+    """Run a terminal interview or draft from issue comment input."""
+    root = Path(repo_root) if repo_root else _REPO_ROOT
+    if from_issue:
+        from scripts.interview_from_issue import process_issue_comment
+
+        process_issue_comment(root)
+        return
+    if not domain:
+        raise click.UsageError("--domain is required unless --from-issue is set")
+    from scripts.interview import start_interview
+
     start_interview(domain=domain, repo_root=root)
 
 
@@ -140,13 +193,15 @@ def init_domain(domain: str, repo_root: str | None):
 
 
 @main.command("serve-fabric-proxy")
-@click.option("--transport", default="streamable-http", show_default=True,
-              type=click.Choice(["stdio", "streamable-http"]))
+@click.option(
+    "--transport", default="streamable-http", show_default=True, type=click.Choice(["stdio", "streamable-http"])
+)
 @click.option("--port", default=8001, show_default=True, envvar="CANON_FABRIC_PROXY_PORT")
 @click.option("--repo-root", default=None, type=click.Path(), envvar="CANON_REPO_ROOT")
 def serve_fabric_proxy(transport: str, port: int, repo_root: str | None):
     """Start the Fabric Proxy MCP server."""
     import asyncio
+
     from serving.fabric_proxy.server import run_http_server, run_stdio_server
 
     root = Path(repo_root) if repo_root else _REPO_ROOT
@@ -207,8 +262,7 @@ def bootstrap(domain: str, config: str, repo_root: str | None, no_pr: bool, dry_
 
 @main.command("export")
 @click.option("--domain", required=True, help="Domain slug to export")
-@click.option("--format", "fmt", default="osi", show_default=True,
-              type=click.Choice(["osi"]), help="Export format")
+@click.option("--format", "fmt", default="osi", show_default=True, type=click.Choice(["osi"]), help="Export format")
 @click.option("--out", default=None, type=click.Path(), help="Output file path (default: stdout)")
 @click.option("--repo-root", default=None, type=click.Path())
 def export(domain: str, fmt: str, out: str | None, repo_root: str | None):
@@ -217,6 +271,7 @@ def export(domain: str, fmt: str, out: str | None, repo_root: str | None):
 
     if fmt == "osi":
         from scripts.export_osi import export_domain
+
         data = export_domain(domain, root)
         output = yaml.dump(data, allow_unicode=True, sort_keys=False, default_flow_style=False)
     else:

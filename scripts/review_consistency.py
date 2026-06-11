@@ -73,18 +73,14 @@ def review_consistency(domain: str, repo_root: Path | None = None) -> list[str]:
             if not src:
                 continue
             if src.get("type") == "semantic_model" and not src.get("measure"):
-                findings.append(
-                    f"metrics.yaml: '{m['name']}' has a semantic_model source "
-                    f"with no 'measure' field"
-                )
+                findings.append(f"metrics.yaml: '{m['name']}' has a semantic_model source with no 'measure' field")
 
     # Check 4: glossary related_metrics resolve to known metrics
     for t in terms:
         for ref in t.get("related_metrics", []):
             if ref not in metric_names:
                 findings.append(
-                    f"glossary.yaml: term '{t['name']}' references metric '{ref}' "
-                    f"which is not defined in metrics.yaml"
+                    f"glossary.yaml: term '{t['name']}' references metric '{ref}' which is not defined in metrics.yaml"
                 )
 
     # Check 5: glossary related_dimensions resolve to known dimensions
@@ -97,4 +93,3 @@ def review_consistency(domain: str, repo_root: Path | None = None) -> list[str]:
                 )
 
     return findings
-

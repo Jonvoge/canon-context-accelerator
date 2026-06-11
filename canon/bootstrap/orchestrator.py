@@ -25,14 +25,12 @@ import logging
 import os
 import re
 import textwrap
-from dataclasses import dataclass, field, asdict
-from datetime import datetime, timezone
+from dataclasses import asdict, dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-import yaml
-
-from canon.bootstrap.parsing.parsers import parse_directory, ParsedChunk
+from canon.bootstrap.parsing.parsers import ParsedChunk, parse_directory
 
 logger = logging.getLogger(__name__)
 
@@ -41,18 +39,19 @@ _MODEL = "claude-haiku-4-5"
 
 # ── Data models ───────────────────────────────────────────────────────────────
 
+
 @dataclass
 class BootstrapEvidence:
     measure_name: str
     platform_found: bool
-    doc_mentions: list[str] = field(default_factory=list)   # verbatim text snippets
-    doc_sources: list[str] = field(default_factory=list)    # file names
+    doc_mentions: list[str] = field(default_factory=list)  # verbatim text snippets
+    doc_sources: list[str] = field(default_factory=list)  # file names
 
 
 @dataclass
 class BootstrapDraft:
     measure_name: str
-    confidence: str   # high | medium | low
+    confidence: str  # high | medium | low
     metric_entry: dict = field(default_factory=dict)
     evidence: BootstrapEvidence | None = None
     needs_interview: bool = False
@@ -75,6 +74,7 @@ class BootstrapReport:
 
 # ── Cross-reference ───────────────────────────────────────────────────────────
 
+
 def _normalize(text: str) -> str:
     return re.sub(r"[^a-z0-9 ]", "", text.lower()).strip()
 
@@ -87,14 +87,14 @@ def _find_doc_mentions(measure_name: str, chunks: list[ParsedChunk], min_length:
     name_norm = _normalize(measure_name)
     results = []
     for chunk in chunks:
-        if _normalize(chunk.section).__contains__(name_norm) or \
-           _normalize(chunk.text[:500]).__contains__(name_norm):
+        if _normalize(chunk.section).__contains__(name_norm) or _normalize(chunk.text[:500]).__contains__(name_norm):
             snippet = chunk.text[:300].replace("\n", " ")
             results.append((chunk.source_file, snippet))
     return results[:3]  # cap at 3 snippets per measure
 
 
 # ── LLM drafting (optional — only when ANTHROPIC_API_KEY is set) ─────────────
+
 
 def _try_import_anthropic() -> Any:
     """Return anthropic.Anthropic client if available and API key set, else None."""
@@ -103,6 +103,7 @@ def _try_import_anthropic() -> Any:
         return None
     try:
         import anthropic as _anthropic
+
         return _anthropic.Anthropic(api_key=api_key)
     except ImportError:
         logger.warning("anthropic package not installed — LLM drafting disabled")
@@ -206,6 +207,7 @@ def _draft_ontology_dimension(
 
 # ── Deterministic stub (no LLM) ───────────────────────────────────────────────
 
+
 def _stub_metric(measure_name: str, domain: str, today: str) -> dict:
     """Build a minimal metrics.yaml stub without LLM — all TODO fields for human review."""
     return {
@@ -231,6 +233,7 @@ def _stub_metric(measure_name: str, domain: str, today: str) -> dict:
 
 # ── Main orchestrator ─────────────────────────────────────────────────────────
 
+
 def run_bootstrap(
     domain: str,
     config_path: Path,
@@ -238,9 +241,9 @@ def run_bootstrap(
     create_pr: bool = True,
     dry_run: bool = False,
 ) -> BootstrapReport:
-    today = datetime.now(timezone.utc).date().isoformat()
-    now_iso = datetime.now(timezone.utc).isoformat()
-    branch = f"canon/bootstrap/{domain}-{datetime.now(timezone.utc).strftime('%Y%m%d')}"
+    today = datetime.now(UTC).date().isoformat()
+    now_iso = datetime.now(UTC).isoformat()
+    branch = f"canon/bootstrap/{domain}-{datetime.now(UTC).strftime('%Y%m%d')}"
 
     # LLM client is optional — deterministic stubs are always produced first
     llm_client = _try_import_anthropic()
@@ -270,9 +273,11 @@ def run_bootstrap(
 
     # ── Stage 2: Scan platform ─────────────────────────────────────────────────
     import yaml as _yaml
+
     config = _yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
 
-    from scripts.scan import _get_domain_config, _build_connector
+    from scripts.scan import _build_connector, _get_domain_config
+
     domain_cfg = _get_domain_config(config, domain)
     semantic_connector_id = domain_cfg.get("semantic_connector", "")
     connector_cfgs = {c["id"]: c for c in config.get("connectors", [])}
@@ -339,13 +344,15 @@ def run_bootstrap(
             metric_entry = _stub_metric(measure_name, domain, today)
             needs_interview = True
 
-        drafts.append(BootstrapDraft(
-            measure_name=measure_name,
-            confidence=confidence,
-            metric_entry=metric_entry,
-            evidence=evidence,
-            needs_interview=needs_interview,
-        ))
+        drafts.append(
+            BootstrapDraft(
+                measure_name=measure_name,
+                confidence=confidence,
+                metric_entry=metric_entry,
+                evidence=evidence,
+                needs_interview=needs_interview,
+            )
+        )
         logger.info("  Drafted '%s' [confidence=%s]", measure_name, confidence)
 
     report.drafts = drafts
@@ -356,9 +363,7 @@ def run_bootstrap(
     if existing_ontology_path.exists():
         existing_ontology = _yaml.safe_load(existing_ontology_path.read_text(encoding="utf-8")) or {}
 
-    existing_dim_columns = {
-        d.get("column", "") for d in existing_ontology.get("dimensions", [])
-    }
+    existing_dim_columns = {d.get("column", "") for d in existing_ontology.get("dimensions", [])}
 
     new_dimensions = []
     if llm_client:
@@ -373,7 +378,9 @@ def run_bootstrap(
                     values = []
                 if values and len(values) <= 20:
                     try:
-                        dim = _draft_ontology_dimension(llm_client, table.name, col.name, [str(v) for v in values], domain)
+                        dim = _draft_ontology_dimension(
+                            llm_client, table.name, col.name, [str(v) for v in values], domain
+                        )
                         new_dimensions.append(dim)
                         logger.info("  Drafted dimension %s.%s [%d values]", table.name, col.name, len(values))
                     except Exception as e:
@@ -398,9 +405,8 @@ def run_bootstrap(
         new_metric_entries = [d.metric_entry for d in drafts]
         updated_metrics = dict(existing_data)
         updated_metrics.setdefault("metrics", []).extend(new_metric_entries)
-        metrics_yaml = (
-            "# yaml-language-server: $schema=../../schemas/metrics.schema.json\n"
-            + _yaml.dump(updated_metrics, allow_unicode=True, sort_keys=False, default_flow_style=False)
+        metrics_yaml = "# yaml-language-server: $schema=../../schemas/metrics.schema.json\n" + _yaml.dump(
+            updated_metrics, allow_unicode=True, sort_keys=False, default_flow_style=False
         )
 
         metrics_sha = None
@@ -422,9 +428,8 @@ def run_bootstrap(
         if new_dimensions:
             updated_ontology = dict(existing_ontology)
             updated_ontology.setdefault("dimensions", []).extend(new_dimensions)
-            ontology_yaml = (
-                "# yaml-language-server: $schema=../../schemas/ontology.schema.json\n"
-                + _yaml.dump(updated_ontology, allow_unicode=True, sort_keys=False, default_flow_style=False)
+            ontology_yaml = "# yaml-language-server: $schema=../../schemas/ontology.schema.json\n" + _yaml.dump(
+                updated_ontology, allow_unicode=True, sort_keys=False, default_flow_style=False
             )
             ontology_sha = None
             try:
@@ -465,7 +470,7 @@ def run_bootstrap(
             > cross-file consistency when you push changes.
 
             **Run mode:** {llm_mode}
-            **Source documents:** {', '.join(report.doc_files) if report.doc_files else 'none (platform-only)'}
+            **Source documents:** {", ".join(report.doc_files) if report.doc_files else "none (platform-only)"}
             **Platform measures found:** {len(platform_measure_names)}
             **Already documented (preserved):** {len(existing_names)}
             **New definitions drafted:** {len(drafts)}

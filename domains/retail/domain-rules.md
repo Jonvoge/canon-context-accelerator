@@ -35,3 +35,10 @@
 |---|---|---|
 | 2026-05-15 | Retail Analytics Team | Initial domain definition |
 | 2026-04-22 | Finance Review | Exclude promotional bundles from revenue |
+
+
+## Query routing
+
+- **Aggregates / KPIs → execute_metric (DAX, primary semantic model)**
+- **Detail rows, joins, exports, columns absent from the model → execute_metric SQL pattern, else execute_sql**
+- Agent must state in its answer which path produced the number.

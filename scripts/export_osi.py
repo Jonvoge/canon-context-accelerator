@@ -68,18 +68,22 @@ def _build_datasets(ontology: dict, schema_inventory: dict | None) -> list[dict]
             existing_cols = {f["name"] for f in tables[tbl_name]}
             for col in tbl.get("columns", []):
                 if col not in existing_cols:
-                    tables[tbl_name].append({
-                        "name": col,
-                        "expression": {"dialects": [{"dialect": "ANSI_SQL", "expression": col}]},
-                    })
+                    tables[tbl_name].append(
+                        {
+                            "name": col,
+                            "expression": {"dialects": [{"dialect": "ANSI_SQL", "expression": col}]},
+                        }
+                    )
 
     datasets = []
     for table_name, fields in sorted(tables.items()):
-        datasets.append({
-            "name": table_name,
-            "source": table_name,
-            "fields": fields,
-        })
+        datasets.append(
+            {
+                "name": table_name,
+                "source": table_name,
+                "fields": fields,
+            }
+        )
     return datasets
 
 
@@ -101,18 +105,12 @@ def _build_metrics(metrics_data: dict) -> list[dict]:
 
         if not sql_expression:
             # Derive a stub from governed_sources measure name
-            measure = (
-                m.get("governed_sources", {})
-                .get("primary", {})
-                .get("measure", name)
-            )
+            measure = m.get("governed_sources", {}).get("primary", {}).get("measure", name)
             sql_expression = f"-- Fabric DAX measure: {measure} (no ANSI SQL pattern available)"
 
         osi_metric: dict = {
             "name": name,
-            "expression": {
-                "dialects": [{"dialect": "ANSI_SQL", "expression": sql_expression}]
-            },
+            "expression": {"dialects": [{"dialect": "ANSI_SQL", "expression": sql_expression}]},
             "description": m.get("definition", "").strip(),
             "ai_context": {
                 "synonyms": m.get("aliases", []),

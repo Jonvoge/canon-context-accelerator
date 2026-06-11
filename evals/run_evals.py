@@ -22,7 +22,7 @@ import json
 import logging
 import os
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import anthropic
@@ -50,6 +50,7 @@ Respond ONLY with a JSON object (no prose, no markdown) in this exact format:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
+
 def _load_eval_config() -> dict:
     path = _REPO_ROOT / "eval-config.yaml"
     if not path.exists():
@@ -58,6 +59,7 @@ def _load_eval_config() -> dict:
 
 
 # ── Data models ───────────────────────────────────────────────────────────────
+
 
 @dataclass
 class EvalQuestion:
@@ -114,6 +116,7 @@ class RegressionReport:
 
 
 # ── Loading ───────────────────────────────────────────────────────────────────
+
 
 def _load_questions(domain: str) -> list[EvalQuestion]:
     path = _REPO_ROOT / "evals" / domain / "questions.yaml"
@@ -176,8 +179,7 @@ def _assemble_context(domain: str) -> str:
     for d in ontology.get("dimensions", []):
         val_sample = list(d.get("value_descriptions", {}).keys())[:5]
         dim_lines.append(
-            f"- {d['name']} (column: {d.get('column', '')}) "
-            + (f"values: {val_sample}" if val_sample else "")
+            f"- {d['name']} (column: {d.get('column', '')}) " + (f"values: {val_sample}" if val_sample else "")
         )
     if dim_lines:
         sections.append("## DIMENSIONS\n" + "\n".join(dim_lines))
@@ -198,6 +200,7 @@ def _assemble_context(domain: str) -> str:
 
 
 # ── LLM call ─────────────────────────────────────────────────────────────────
+
 
 def _ask_llm(client: anthropic.Anthropic, context: str, question: str, model: str, max_tokens: int) -> str:
     """Ask the LLM and return raw response text."""
@@ -223,6 +226,7 @@ def _parse_response(raw: str) -> dict:
 
 
 # ── Scoring ───────────────────────────────────────────────────────────────────
+
 
 def _score(q: EvalQuestion, actual: dict) -> EvalScore:
     actual_metric = actual.get("metric", "")
@@ -263,6 +267,7 @@ def _score(q: EvalQuestion, actual: dict) -> EvalScore:
 
 # ── Baseline management ───────────────────────────────────────────────────────
 
+
 def _load_baseline(domain: str) -> dict | None:
     path = _REPO_ROOT / ".canon-cache" / domain / "eval-baseline.json"
     if not path.exists():
@@ -300,6 +305,7 @@ def _check_regression(result: EvalResult, baseline: dict, regression_threshold: 
 
 
 # ── Runner ────────────────────────────────────────────────────────────────────
+
 
 def run_evals(domain: str, api_key: str | None = None, config: dict | None = None) -> EvalResult:
     if config is None:
@@ -348,7 +354,7 @@ def run_evals(domain: str, api_key: str | None = None, config: dict | None = Non
     result = EvalResult(
         domain=domain,
         model=model,
-        run_at=datetime.now(timezone.utc).isoformat(),
+        run_at=datetime.now(UTC).isoformat(),
         total=len(scores),
         passed=passed,
         failed=len(scores) - passed,
@@ -367,14 +373,15 @@ def run_evals(domain: str, api_key: str | None = None, config: dict | None = Non
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
+
 def _main() -> None:
     parser = argparse.ArgumentParser(description="Canon eval harness")
     parser.add_argument("--domain", default=None, help="Domain to evaluate (default: all)")
     parser.add_argument("--api-key", default=None, help="Anthropic API key")
-    parser.add_argument("--update-baseline", action="store_true",
-                        help="Save current results as the new baseline")
-    parser.add_argument("--check-regression", action="store_true",
-                        help="Exit non-zero if regression vs baseline is detected")
+    parser.add_argument("--update-baseline", action="store_true", help="Save current results as the new baseline")
+    parser.add_argument(
+        "--check-regression", action="store_true", help="Exit non-zero if regression vs baseline is detected"
+    )
     args = parser.parse_args()
 
     config = _load_eval_config()
@@ -390,8 +397,7 @@ def _main() -> None:
             domains = configured
         else:
             domains_dir = _REPO_ROOT / "domains"
-            domains = [d.name for d in sorted(domains_dir.iterdir())
-                       if d.is_dir() and d.name != "_template"]
+            domains = [d.name for d in sorted(domains_dir.iterdir()) if d.is_dir() and d.name != "_template"]
 
     any_failure = False
 
@@ -406,8 +412,7 @@ def _main() -> None:
             report = _check_regression(result, baseline, regression_threshold)
             if report.regression:
                 logger.warning(
-                    "  REGRESSION: pass rate dropped %.1f%% vs baseline "
-                    "(%.0f%% → %.0f%%). Regressed questions: %s",
+                    "  REGRESSION: pass rate dropped %.1f%% vs baseline (%.0f%% → %.0f%%). Regressed questions: %s",
                     abs(report.delta) * 100,
                     report.baseline_pass_rate * 100,
                     report.current_pass_rate * 100,
@@ -416,9 +421,13 @@ def _main() -> None:
                 if args.check_regression:
                     any_failure = True
             else:
-                delta_str = f"+{report.delta*100:.1f}%" if report.delta >= 0 else f"{report.delta*100:.1f}%"
-                logger.info("  vs baseline: %s (%.0f%% → %.0f%%)",
-                            delta_str, report.baseline_pass_rate * 100, result.pass_rate * 100)
+                delta_str = f"+{report.delta * 100:.1f}%" if report.delta >= 0 else f"{report.delta * 100:.1f}%"
+                logger.info(
+                    "  vs baseline: %s (%.0f%% → %.0f%%)",
+                    delta_str,
+                    report.baseline_pass_rate * 100,
+                    result.pass_rate * 100,
+                )
         else:
             logger.info("  No baseline found — run with --update-baseline to establish one")
 
@@ -431,6 +440,7 @@ def _main() -> None:
             any_failure = True
 
     import sys
+
     sys.exit(1 if any_failure else 0)
 
 

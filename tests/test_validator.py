@@ -13,10 +13,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 import yaml
 
-from canon.schema.validator import ValidationResult, validate_domain
+from canon.schema.validator import validate_domain
 
 
 def test_retail_domain_passes(repo_root: Path) -> None:

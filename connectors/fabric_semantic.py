@@ -30,9 +30,7 @@ from connectors.base import (
 logger = logging.getLogger(__name__)
 
 _POWER_BI_SCOPE = "https://analysis.windows.net/powerbi/api/.default"
-_EXECUTE_QUERIES_URL = (
-    "https://api.powerbi.com/v1.0/myorg/groups/{workspace_id}/datasets/{dataset_id}/executeQueries"
-)
+_EXECUTE_QUERIES_URL = "https://api.powerbi.com/v1.0/myorg/groups/{workspace_id}/datasets/{dataset_id}/executeQueries"
 _DATASETS_URL = "https://api.powerbi.com/v1.0/myorg/groups/{workspace_id}/datasets"
 
 _INFO_VIEW_MEASURES = "EVALUATE INFO.VIEW.MEASURES()"
@@ -168,8 +166,7 @@ class FabricSemanticConnector(BaseConnector):
         rels_raw = self._q(_INFO_VIEW_RELATIONSHIPS)
 
         table_id_to_name: dict[Any, str] = {
-            t.get("ID"): (t.get("Name") or t.get("ExplicitName") or "")
-            for t in tables_raw
+            t.get("ID"): (t.get("Name") or t.get("ExplicitName") or "") for t in tables_raw
         }
 
         tables = [
@@ -230,12 +227,7 @@ class FabricSemanticConnector(BaseConnector):
             table, col = source_ref.rsplit(".", 1)
         else:
             raise ValueError(f"Cannot parse source_ref: '{source_ref}'. Use 'Table[Column]' format.")
-        dax = (
-            f"EVALUATE "
-            f"TOPN({max_values}, "
-            f"DISTINCT(SELECTCOLUMNS('{table}', \"v\", '{table}'[{col}])), "
-            f"[v], ASC)"
-        )
+        dax = f"EVALUATE TOPN({max_values}, DISTINCT(SELECTCOLUMNS('{table}', \"v\", '{table}'[{col}])), [v], ASC)"
         rows = self._execute_dax(dax)
         return [list(r.values())[0] for r in rows if list(r.values())[0] is not None]
 

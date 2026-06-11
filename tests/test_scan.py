@@ -9,15 +9,12 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from connectors.base import (
-    ColumnMetadata,
     MeasureMetadata,
     MetadataSnapshot,
     TableMetadata,
 )
-from scripts.scan import ScanFinding, ScanResult, run_scan
+from scripts.scan import run_scan
 
 
 def _make_snapshot_with_undocumented_measure() -> MetadataSnapshot:
@@ -28,7 +25,9 @@ def _make_snapshot_with_undocumented_measure() -> MetadataSnapshot:
         ],
         measures=[
             MeasureMetadata(name="Total Revenue", table="fact_sales", expression="SUM(fact_sales[amount])"),
-            MeasureMetadata(name="Undocumented Measure XYZ", table="fact_sales", expression="CALCULATE(SUM(fact_sales[qty]))"),
+            MeasureMetadata(
+                name="Undocumented Measure XYZ", table="fact_sales", expression="CALCULATE(SUM(fact_sales[qty]))"
+            ),
         ],
         relationships=[],
     )
@@ -84,7 +83,9 @@ def test_orphaned_definition_finding(mock_build: MagicMock, repo_root: Path) -> 
 
 
 @patch("scripts.scan._build_connector")
-def test_clean_domain_no_critical_findings(mock_build: MagicMock, repo_root: Path, canned_snapshot: MetadataSnapshot) -> None:
+def test_clean_domain_no_critical_findings(
+    mock_build: MagicMock, repo_root: Path, canned_snapshot: MetadataSnapshot
+) -> None:
     """When the model matches Canon exactly, no high-severity findings should appear."""
     mock_connector = MagicMock()
     mock_connector.validate_config.return_value = []
